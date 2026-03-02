@@ -446,7 +446,11 @@ td{padding:8px 16px;vertical-align:middle}
         <div class="settings-key-label">Groq &mdash; AI scoring &amp; analysis<span id="groq-status" class="settings-key-status unset">Not set</span></div>
         <textarea id="groq-key-input" class="settings-key-input" rows="2" placeholder="gsk_&#8230;" spellcheck="false" autocomplete="off"></textarea>
         <div class="settings-key-hint"><strong style="color:var(--green)">Free: 1,000 req &amp; 500K tokens/day.</strong> Powers all AI scoring, descriptions, bull/bear cases. Get yours at <a href="https://console.groq.com" target="_blank">console.groq.com</a></div>
-        <button class="settings-save-btn" onclick="saveGroqKey()">Save Groq Key</button>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
+          <button class="settings-save-btn" onclick="saveGroqKey()">Save Groq Key</button>
+          <button class="settings-save-btn secondary" id="groq-test-btn" onclick="testGroqKey()">Test connection</button>
+          <span id="groq-test-result" style="font-size:11px;color:var(--text-3)"></span>
+        </div>
       </div>
       <div class="settings-key-block" style="border-bottom:1px solid var(--border)">
         <div class="settings-key-label">Fiscal.ai &mdash; primary financial data<span id="fiscal-status" class="settings-key-status unset">Not set</span></div>
@@ -640,9 +644,10 @@ function showSettingsToast(msg) {
 
 function saveGroqKey() {
   const inp = document.getElementById('groq-key-input');
-  const val = (inp.value || '').trim();
+  const val = (inp.value || '').replace(/\s+/g, '');
   if (!val || val.includes('\u2026')) { showSettingsToast('Paste your full key first'); return; }
   _groqKey = val;
+  LS.set('groqKey', _groqKey);
   inp.value = '';
   inp.placeholder = 'Key saved \u2713 (paste new key to replace)';
   updateGroqStatus();
@@ -657,9 +662,10 @@ function updateGroqStatus() {
 
 function saveFiscalKey() {
   const inp = document.getElementById('fiscal-key-input');
-  const val = (inp.value || '').trim();
+  const val = (inp.value || '').replace(/\s+/g, '');
   if (!val || val.includes('\u2026')) { showSettingsToast('Paste your full key first'); return; }
   _fiscalKey = val;
+  LS.set('fiscalKey', _fiscalKey);
   _fiscalRateLimited = false; _fiscalRateLimitResetAt = 0;
   inp.value = '';
   inp.placeholder = 'Key saved \u2713 (paste new key to replace)';
@@ -675,9 +681,10 @@ function updateFiscalStatus() {
 
 function saveFmpKey() {
   const inp = document.getElementById('fmp-key-input');
-  const val = (inp.value || '').trim();
+  const val = (inp.value || '').replace(/\s+/g, '');
   if (!val || val.includes('\u2026')) { showSettingsToast('Paste your full key first'); return; }
   _fmpKey = val;
+  LS.set('fmpKey', _fmpKey);
   inp.value = '';
   inp.placeholder = 'Key saved \u2713 (paste new key to replace)';
   updateFmpStatus();
@@ -1091,15 +1098,24 @@ function toggleHoldingGroup(key) {
 // GROQ AI
 // ═══════════════════════════════════════════════════════════════
 async function groqChat(messages, model, maxTokens) {
-  if (!_groqKey) throw new Error('No Groq API key set. Please add your key in Settings → API Keys.');
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _groqKey },
-    body: JSON.stringify({ model: model || 'llama-3.3-70b-versatile', max_tokens: maxTokens || 800, messages, temperature: 0.3 })
-  });
+  const key = (_groqKey || '').replace(/\s+/g, '');
+  if (!key) throw new Error('No Groq API key set. Please add your key in Settings → API Keys.');
+  let res;
+  try {
+    res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      body: JSON.stringify({ model: model || 'llama-3.3-70b-versatile', max_tokens: maxTokens || 800, messages, temperature: 0.3 })
+    });
+  } catch (networkErr) {
+    throw new Error('Network error reaching Groq — check your internet connection. (' + networkErr.message + ')');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error('Groq error ' + res.status + ': ' + (err.error?.message || res.statusText));
+    const msg = err.error?.message || res.statusText;
+    if (res.status === 401) throw new Error('Groq key rejected (401) — re-enter your key in Settings. ' + msg);
+    if (res.status === 429) throw new Error('Groq rate limit reached (429) — wait a moment and try again.');
+    throw new Error('Groq error ' + res.status + ': ' + msg);
   }
   const data = await res.json();
   return data.choices?.[0]?.message?.content || '';
@@ -1110,6 +1126,25 @@ async function groqJSON(messages, model, maxTokens) {
   const clean = text.replace(/```json|```/g, '').trim();
   try { return JSON.parse(clean); }
   catch { const m = clean.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); throw new Error('JSON parse failed: ' + clean.slice(0, 100)); }
+}
+
+async function testGroqKey() {
+  const btn = document.getElementById('groq-test-btn');
+  const res = document.getElementById('groq-test-result');
+  if (!_groqKey) { res.style.color = 'var(--red)'; res.textContent = '✗ No key saved yet'; return; }
+  btn.disabled = true; btn.textContent = 'Testing…';
+  res.style.color = 'var(--text-3)'; res.textContent = '';
+  try {
+    const reply = await groqChat([{ role: 'user', content: 'Reply with the single word: OK' }], 'llama-3.1-8b-instant', 10);
+    if (reply.trim().includes('OK') || reply.length > 0) {
+      res.style.color = 'var(--green)'; res.textContent = '\u2713 Connected — key works!';
+    } else {
+      res.style.color = 'var(--amber)'; res.textContent = '\u26A0 Unexpected response: ' + reply.slice(0,40);
+    }
+  } catch(e) {
+    res.style.color = 'var(--red)'; res.textContent = '\u2717 ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = 'Test connection';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1963,9 +1998,9 @@ function persistPortfolio() {
 
 function restoreAll() {
   // Keys
-  const gk = LS.get('groqKey');   if (gk)  { _groqKey   = gk;  }
-  const fk = LS.get('fiscalKey'); if (fk)  { _fiscalKey = fk;  }
-  const mk = LS.get('fmpKey');    if (mk)  { _fmpKey    = mk;  }
+  const gk = LS.get('groqKey');   if (gk)  { _groqKey   = String(gk).replace(/\s+/g,'');  }
+  const fk = LS.get('fiscalKey'); if (fk)  { _fiscalKey = String(fk).replace(/\s+/g,''); }
+  const mk = LS.get('fmpKey');    if (mk)  { _fmpKey    = String(mk).replace(/\s+/g,''); }
   // Settings
   const s = LS.get('settings');
   if (s) Object.assign(_settings, s);
