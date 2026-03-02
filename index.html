@@ -639,9 +639,12 @@ function showSettingsToast(msg) {
 }
 
 function saveGroqKey() {
-  const val = (document.getElementById('groq-key-input').value || '').trim();
-  if (!val) return;
+  const inp = document.getElementById('groq-key-input');
+  const val = (inp.value || '').trim();
+  if (!val || val.includes('\u2026')) { showSettingsToast('Paste your full key first'); return; }
   _groqKey = val;
+  inp.value = '';
+  inp.placeholder = 'Key saved \u2713 (paste new key to replace)';
   updateGroqStatus();
   showSettingsToast('Groq key saved \u2713');
 }
@@ -653,10 +656,13 @@ function updateGroqStatus() {
 }
 
 function saveFiscalKey() {
-  const val = (document.getElementById('fiscal-key-input').value || '').trim();
-  if (!val) return;
+  const inp = document.getElementById('fiscal-key-input');
+  const val = (inp.value || '').trim();
+  if (!val || val.includes('\u2026')) { showSettingsToast('Paste your full key first'); return; }
   _fiscalKey = val;
   _fiscalRateLimited = false; _fiscalRateLimitResetAt = 0;
+  inp.value = '';
+  inp.placeholder = 'Key saved \u2713 (paste new key to replace)';
   updateFiscalStatus();
   showSettingsToast('Fiscal.ai key saved \u2713');
 }
@@ -668,9 +674,12 @@ function updateFiscalStatus() {
 }
 
 function saveFmpKey() {
-  const val = (document.getElementById('fmp-key-input').value || '').trim();
-  if (!val) return;
+  const inp = document.getElementById('fmp-key-input');
+  const val = (inp.value || '').trim();
+  if (!val || val.includes('\u2026')) { showSettingsToast('Paste your full key first'); return; }
   _fmpKey = val;
+  inp.value = '';
+  inp.placeholder = 'Key saved \u2713 (paste new key to replace)';
   updateFmpStatus();
   showSettingsToast('FMP key saved \u2713');
 }
@@ -710,10 +719,13 @@ function confirmClearWatchlist() {
 }
 
 function refreshSettingsUI() {
-  // Keys (masked)
-  document.getElementById('groq-key-input').value   = _groqKey   ? _groqKey.slice(0,8)   + '\u2026' + _groqKey.slice(-4)   : '';
-  document.getElementById('fiscal-key-input').value = _fiscalKey ? _fiscalKey.slice(0,8) + '\u2026' + _fiscalKey.slice(-4) : '';
-  document.getElementById('fmp-key-input').value    = _fmpKey    ? _fmpKey.slice(0,8)    + '\u2026' + _fmpKey.slice(-4)    : '';
+  // Never pre-fill inputs with masked keys — just update placeholders to show saved status
+  const groqInp   = document.getElementById('groq-key-input');
+  const fiscalInp = document.getElementById('fiscal-key-input');
+  const fmpInp    = document.getElementById('fmp-key-input');
+  if (!groqInp.value)   groqInp.placeholder   = _groqKey   ? 'Key saved \u2713 \u2014 paste a new key to replace' : 'gsk_\u2026';
+  if (!fiscalInp.value) fiscalInp.placeholder = _fiscalKey ? 'Key saved \u2713 \u2014 paste a new key to replace' : 'Paste Fiscal.ai key\u2026';
+  if (!fmpInp.value)    fmpInp.placeholder    = _fmpKey    ? 'Key saved \u2713 \u2014 paste a new key to replace' : 'Paste FMP key\u2026';
   updateGroqStatus(); updateFiscalStatus(); updateFmpStatus();
   // Cache counts
   document.getElementById('fiscal-cache-count').textContent = Object.keys(_fiscalCache).length;
@@ -1925,15 +1937,140 @@ function toggleWLFromDetail(name, btn) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PERSISTENCE  (localStorage)
+// ═══════════════════════════════════════════════════════════════
+const LS = {
+  get(k)    { try { return JSON.parse(localStorage.getItem('pa_' + k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem('pa_' + k, JSON.stringify(v)); } catch {} },
+  del(k)    { try { localStorage.removeItem('pa_' + k); } catch {} },
+};
+
+function persistAll() {
+  // Keys
+  if (_groqKey)   LS.set('groqKey',   _groqKey);
+  if (_fiscalKey) LS.set('fiscalKey', _fiscalKey);
+  if (_fmpKey)    LS.set('fmpKey',    _fmpKey);
+  // Settings
+  LS.set('settings', _settings);
+  // Watchlist (already saved per-change but keep in sync)
+  LS.set('watchlist', watchlist);
+}
+
+function persistPortfolio() {
+  if (portfolioRows) LS.set('portfolioRows', portfolioRows);
+  if (txRows)        LS.set('txRows', txRows.map(r => ({ ...r, date: r.date.toISOString() })));
+}
+
+function restoreAll() {
+  // Keys
+  const gk = LS.get('groqKey');   if (gk)  { _groqKey   = gk;  }
+  const fk = LS.get('fiscalKey'); if (fk)  { _fiscalKey = fk;  }
+  const mk = LS.get('fmpKey');    if (mk)  { _fmpKey    = mk;  }
+  // Settings
+  const s = LS.get('settings');
+  if (s) Object.assign(_settings, s);
+  // Watchlist
+  const wl = LS.get('watchlist');
+  if (wl && Array.isArray(wl)) watchlist = wl;
+  // Portfolio
+  const pr = LS.get('portfolioRows');
+  if (pr && Array.isArray(pr) && pr.length) {
+    portfolioRows = pr;
+  }
+  // Transactions (dates need re-hydrating)
+  const tr = LS.get('txRows');
+  if (tr && Array.isArray(tr) && tr.length) {
+    txRows = tr.map(r => ({ ...r, date: new Date(r.date) }));
+  }
+}
+
+// ── Patch save functions to auto-persist ──────────────────────
+const _origSaveGroq   = saveGroqKey;
+const _origSaveFiscal = saveFiscalKey;
+const _origSaveFmp    = saveFmpKey;
+saveGroqKey   = function() { _origSaveGroq();   LS.set('groqKey',   _groqKey); };
+saveFiscalKey = function() { _origSaveFiscal(); LS.set('fiscalKey', _fiscalKey); };
+saveFmpKey    = function() { _origSaveFmp();    LS.set('fmpKey',    _fmpKey); };
+
+// Patch portfolio upload handlers to auto-persist after load
+const _origHandlePortfolio = handlePortfolioFile;
+const _origHandleTx        = handleTxFile;
+handlePortfolioFile = async function(file) { await _origHandlePortfolio(file); persistPortfolio(); };
+handleTxFile        = async function(file) { await _origHandleTx(file);        persistPortfolio(); };
+
+// Persist watchlist on every save
+const _origSaveWL = saveWatchlist;
+saveWatchlist = function() { _origSaveWL(); LS.set('watchlist', watchlist); };
+
+// Persist settings changes
+['setting-auto-watchlist','setting-concurrency','setting-currency','setting-privacy-mode'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', () => LS.set('settings', _settings));
+});
+
+// ── Add a "Forget data" button to settings cache section ──────
+(function() {
+  const rows = document.querySelector('.settings-section:last-of-type .settings-section-header');
+  if (!rows) return;
+  const section = rows.closest('.settings-section');
+  if (!section) return;
+  const row = document.createElement('div');
+  row.className = 'settings-row';
+  row.innerHTML = `
+    <div class="settings-row-label">
+      <strong>Clear all saved data</strong>
+      <span>Removes all API keys, portfolio, transactions and watchlist from browser storage. You will need to re-upload your files and re-enter your keys.</span>
+    </div>
+    <div class="settings-row-control">
+      <button class="settings-save-btn danger" onclick="clearAllPersistedData()">Clear all</button>
+    </div>`;
+  section.appendChild(row);
+})();
+
+function clearAllPersistedData() {
+  if (!confirm('This will remove ALL saved data — API keys, portfolio, transactions and watchlist. Are you sure?')) return;
+  ['groqKey','fiscalKey','fmpKey','settings','watchlist','portfolioRows','txRows'].forEach(k => LS.del(k));
+  _groqKey = ''; _fiscalKey = ''; _fmpKey = '';
+  watchlist = []; portfolioRows = null; txRows = null;
+  Object.assign(_settings, { autoWatchlist:false, concurrency:3, currency:'EUR', privacyMode:false });
+  updateGroqStatus(); updateFiscalStatus(); updateFmpStatus();
+  updateWatchlistBadge();
+  refreshSettingsUI();
+  showPage('dashboard');
+  document.getElementById('upload-screen').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+  showSettingsToast('All saved data cleared');
+}
+
+// ── Show a banner if portfolio was restored from storage ───────
+function showRestoredBanner() {
+  const badge = document.getElementById('port-badge');
+  if (badge) {
+    badge.textContent = 'Portfolio restored';
+    badge.style.display = 'block';
+    setTimeout(() => {
+      badge.textContent = '';
+      badge.style.display = 'none';
+    }, 4000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
+restoreAll();
 updateWatchlistBadge();
-// Ensure main content area is always displayed correctly on load
-document.querySelector('.main').style.display = 'flex';
-document.querySelector('.main').style.flex = '1';
-document.querySelector('.main').style.flexDirection = 'column';
-document.querySelector('.main').style.overflow = 'hidden';
-showPage('dashboard');
+if (_settings.privacyMode) togglePrivacyMode(true);
+document.querySelector('.main').style.cssText = 'flex:1;display:flex;flex-direction:column;overflow:hidden';
+if (portfolioRows && portfolioRows.length) {
+  document.getElementById('upload-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  showPage('dashboard');
+  renderDashboard();
+  showRestoredBanner();
+} else {
+  showPage('dashboard');
+}
 </script>
 </body>
 </html>
