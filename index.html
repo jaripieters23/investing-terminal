@@ -243,11 +243,13 @@ td{padding:8px 16px;vertical-align:middle}
 .settings-section-header{padding:16px 20px 14px;border-bottom:1px solid var(--border)}
 .settings-section-title{font-size:13px;font-weight:700;margin-bottom:2px}
 .settings-section-sub{font-size:11px;color:var(--text-3);line-height:1.5}
-.settings-row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.04)}
+.settings-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.04)}
 .settings-row:last-child{border-bottom:none}
+.settings-row-label{flex:1;min-width:0}
 .settings-row-label strong{display:block;font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:2px}
-.settings-row-label span{font-size:11px;color:var(--text-3);line-height:1.5}
-.settings-row-control{flex-shrink:0;display:flex;align-items:center;gap:8px}
+.settings-row-label span{font-size:11px;color:var(--text-3);line-height:1.5;word-break:break-word}
+.settings-row-control{flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:200px}
+.settings-row-control .test-result{font-size:11px;width:100%;white-space:normal;word-break:break-word}
 .settings-key-block{padding:14px 20px}
 .settings-key-label{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
 .settings-key-status{font-size:9px;font-weight:600;padding:2px 8px;border-radius:8px}
@@ -441,28 +443,27 @@ td{padding:8px 16px;vertical-align:middle}
   <div class="settings-body">
     <h2 style="font-size:18px;font-weight:700;margin:0 0 20px">Settings</h2>
     <div class="settings-section">
-      <div class="settings-section-header"><div class="settings-section-title">API Keys</div><div class="settings-section-sub">Keys are stored in memory for this session only and never sent anywhere except their respective APIs.</div></div>
-      <div class="settings-key-block" style="border-bottom:1px solid var(--border)">
-        <div class="settings-key-label">Groq &mdash; AI scoring &amp; analysis<span id="groq-status" class="settings-key-status unset">Not set</span></div>
-        <textarea id="groq-key-input" class="settings-key-input" rows="2" placeholder="gsk_&#8230;" spellcheck="false" autocomplete="off"></textarea>
-        <div class="settings-key-hint"><strong style="color:var(--green)">Free: 1,000 req &amp; 500K tokens/day.</strong> Powers all AI scoring, descriptions, bull/bear cases. Get yours at <a href="https://console.groq.com" target="_blank">console.groq.com</a></div>
-        <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
-          <button class="settings-save-btn" onclick="saveGroqKey()">Save Groq Key</button>
-          <button class="settings-save-btn secondary" id="groq-test-btn" onclick="testGroqKey()">Test connection</button>
-          <span id="groq-test-result" style="font-size:11px;color:var(--text-3)"></span>
+      <div class="settings-section-header"><div class="settings-section-title">API Connections</div><div class="settings-section-sub">All API calls are routed through your Cloudflare Workers. No keys are stored in the app.</div></div>
+      <div class="settings-row">
+        <div class="settings-row-label"><strong>Groq — AI scoring &amp; analysis</strong><span>via <code style="font-size:10px;color:var(--blue)">groq-proxy.jaripieters.workers.dev</code></span></div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" id="groq-test-btn" onclick="testGroqConnection()">Test</button>
+          <span id="groq-test-result" class="test-result" style="color:var(--text-3)"></span>
         </div>
       </div>
-      <div class="settings-key-block" style="border-bottom:1px solid var(--border)">
-        <div class="settings-key-label">Fiscal.ai &mdash; primary financial data<span id="fiscal-status" class="settings-key-status unset">Not set</span></div>
-        <textarea id="fiscal-key-input" class="settings-key-input" rows="2" placeholder="Paste Fiscal.ai key&#8230;" spellcheck="false" autocomplete="off"></textarea>
-        <div class="settings-key-hint"><strong style="color:var(--green)">Primary data source.</strong> Real financials, P/E history, analyst targets. Auto-falls back to FMP on rate limit. <a href="https://fiscal.ai/pricing" target="_blank">fiscal.ai/pricing</a></div>
-        <button class="settings-save-btn" onclick="saveFiscalKey()">Save Fiscal.ai Key</button>
+      <div class="settings-row">
+        <div class="settings-row-label"><strong>Fiscal.ai — primary financial data</strong><span>via <code style="font-size:10px;color:var(--blue)">fiscal-proxy.jaripieters.workers.dev</code></span></div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" id="fiscal-test-btn" onclick="testFiscalConnection()">Test</button>
+          <span id="fiscal-test-result" class="test-result" style="color:var(--text-3)"></span>
+        </div>
       </div>
-      <div class="settings-key-block">
-        <div class="settings-key-label">Financial Modeling Prep &mdash; fallback<span id="fmp-status" class="settings-key-status unset">Not set</span></div>
-        <textarea id="fmp-key-input" class="settings-key-input" rows="2" placeholder="Paste FMP key&#8230;" spellcheck="false" autocomplete="off"></textarea>
-        <div class="settings-key-hint">Auto-used if Fiscal.ai hits its rate limit. Free: 250 calls/day. <a href="https://financialmodelingprep.com/developer" target="_blank">financialmodelingprep.com</a></div>
-        <button class="settings-save-btn" onclick="saveFmpKey()">Save FMP Key</button>
+      <div class="settings-row">
+        <div class="settings-row-label"><strong>FMP — financial data fallback</strong><span>via <code style="font-size:10px;color:var(--blue)">fmp-proxy.jaripieters.workers.dev</code></span></div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" id="fmp-test-btn" onclick="testFmpConnection()">Test</button>
+          <span id="fmp-test-result" class="test-result" style="color:var(--text-3)"></span>
+        </div>
       </div>
     </div>
     <div class="settings-section">
@@ -484,9 +485,9 @@ td{padding:8px 16px;vertical-align:middle}
     </div>
     <div class="settings-section">
       <div class="settings-section-header"><div class="settings-section-title">About</div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>All scoring and qualitative analysis is done by <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b-versatile for scoring, llama-3.1-8b-instant for detail pages). Financial data: Fiscal.ai &rarr; FMP. Live prices: Fiscal.ai &rarr; FMP &rarr; Yahoo Finance.</span></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>All scoring and qualitative analysis is done by <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b-versatile for scoring, llama-3.1-8b-instant for detail pages). Financial data: Fiscal.ai &rarr; FMP fallback. All calls via Cloudflare Workers &mdash; no API keys stored in the app.</span></div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>Quality scoring</strong><span>Based on <em>De Kwaliteitsbelegger</em> by Pieter Slegers. Six criteria: Moat, Management, Capital Intensity, ROIC, Profitability, Growth &mdash; each scored 1&ndash;10.</span></div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>Privacy</strong><span>All portfolio data stays in your browser. Nothing is uploaded to any server. API keys are session-only and in-memory only.</span></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>Privacy</strong><span>All portfolio data stays in your browser. API keys are stored securely in your Cloudflare Workers and never touch the app.</span></div></div>
     </div>
   </div>
 </div>
@@ -518,6 +519,15 @@ td{padding:8px 16px;vertical-align:middle}
 
 <script>
 // ═══════════════════════════════════════════════════════════════
+// CLOUDFLARE WORKER PROXIES
+// ═══════════════════════════════════════════════════════════════
+const WORKERS = {
+  groq:   'https://groq-proxy.jaripieters.workers.dev',
+  fiscal: 'https://fiscal-proxy.jaripieters.workers.dev',
+  fmp:    'https://fmp-proxy.jaripieters.workers.dev',
+};
+
+// ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
 let portfolioRows = null;
@@ -533,10 +543,7 @@ let scanResults = [];
 let _prevPage = 'dashboard';
 let _indexScanAborted = false;
 
-// ── API Keys (session-only, never persisted) ──────────────────
-let _groqKey   = '';
-let _fiscalKey = '';
-let _fmpKey    = '';
+// ── API Keys removed — calls go via Cloudflare Workers ──────
 
 // ── Fiscal.ai rate-limit guard ────────────────────────────────
 let _fiscalRateLimited = false;
@@ -642,60 +649,19 @@ function showSettingsToast(msg) {
   _toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-function saveGroqKey() {
-  const inp = document.getElementById('groq-key-input');
-  const val = (inp.value || '').replace(/\s+/g, '');
-  if (!val || val.includes('\u2026')) { showSettingsToast('Paste your full key first'); return; }
-  _groqKey = val;
-  LS.set('groqKey', _groqKey);
-  inp.value = '';
-  inp.placeholder = 'Key saved \u2713 (paste new key to replace)';
-  updateGroqStatus();
-  showSettingsToast('Groq key saved \u2713');
-}
-function updateGroqStatus() {
-  const s = document.getElementById('groq-status');
-  if (!s) return;
-  s.textContent = _groqKey ? '\u2713 Active' : 'Not set';
-  s.className = 'settings-key-status ' + (_groqKey ? 'set' : 'unset');
-}
-
-function saveFiscalKey() {
-  const inp = document.getElementById('fiscal-key-input');
-  const val = (inp.value || '').replace(/\s+/g, '');
-  if (!val || val.includes('\u2026')) { showSettingsToast('Paste your full key first'); return; }
-  _fiscalKey = val;
-  LS.set('fiscalKey', _fiscalKey);
-  _fiscalRateLimited = false; _fiscalRateLimitResetAt = 0;
-  inp.value = '';
-  inp.placeholder = 'Key saved \u2713 (paste new key to replace)';
-  updateFiscalStatus();
-  showSettingsToast('Fiscal.ai key saved \u2713');
-}
-function updateFiscalStatus() {
+// Key management removed — all API calls go via Cloudflare Workers
+function saveGroqKey()   {}
+function saveFiscalKey() {}
+function saveFmpKey()    {}
+function updateGroqStatus()   {}
+function updateFiscalStatus() { /* rate-limit display only */
   const s = document.getElementById('fiscal-status');
   if (!s) return;
-  if (_fiscalRateLimited) { s.textContent = '\u26A0 Rate limited \u2192 using FMP'; s.className = 'settings-key-status'; s.style.cssText = 'background:rgba(245,158,11,.12);color:var(--amber);font-size:9px;font-weight:600;padding:2px 8px;border-radius:8px'; }
-  else { s.textContent = _fiscalKey ? '\u2713 Active' : 'Not set'; s.className = 'settings-key-status ' + (_fiscalKey ? 'set' : 'unset'); s.style.cssText = ''; }
+  if (_fiscalRateLimited) { s.textContent = '\u26A0 Rate limited \u2192 using FMP'; s.style.color = 'var(--amber)'; }
+  else { s.textContent = ''; }
 }
+function updateFmpStatus() {}
 
-function saveFmpKey() {
-  const inp = document.getElementById('fmp-key-input');
-  const val = (inp.value || '').replace(/\s+/g, '');
-  if (!val || val.includes('\u2026')) { showSettingsToast('Paste your full key first'); return; }
-  _fmpKey = val;
-  LS.set('fmpKey', _fmpKey);
-  inp.value = '';
-  inp.placeholder = 'Key saved \u2713 (paste new key to replace)';
-  updateFmpStatus();
-  showSettingsToast('FMP key saved \u2713');
-}
-function updateFmpStatus() {
-  const s = document.getElementById('fmp-status');
-  if (!s) return;
-  s.textContent = _fmpKey ? '\u2713 Active' : 'Not set';
-  s.className = 'settings-key-status ' + (_fmpKey ? 'set' : 'unset');
-}
 
 function clearFiscalCache() {
   const n = Object.keys(_fiscalCache).length;
@@ -727,13 +693,7 @@ function confirmClearWatchlist() {
 
 function refreshSettingsUI() {
   // Never pre-fill inputs with masked keys — just update placeholders to show saved status
-  const groqInp   = document.getElementById('groq-key-input');
-  const fiscalInp = document.getElementById('fiscal-key-input');
-  const fmpInp    = document.getElementById('fmp-key-input');
-  if (!groqInp.value)   groqInp.placeholder   = _groqKey   ? 'Key saved \u2713 \u2014 paste a new key to replace' : 'gsk_\u2026';
-  if (!fiscalInp.value) fiscalInp.placeholder = _fiscalKey ? 'Key saved \u2713 \u2014 paste a new key to replace' : 'Paste Fiscal.ai key\u2026';
-  if (!fmpInp.value)    fmpInp.placeholder    = _fmpKey    ? 'Key saved \u2713 \u2014 paste a new key to replace' : 'Paste FMP key\u2026';
-  updateGroqStatus(); updateFiscalStatus(); updateFmpStatus();
+  // No key inputs — keys live in Cloudflare Workers
   // Cache counts
   document.getElementById('fiscal-cache-count').textContent = Object.keys(_fiscalCache).length;
   document.getElementById('fmp-cache-count').textContent    = Object.keys(_fmpCache).length;
@@ -1098,24 +1058,22 @@ function toggleHoldingGroup(key) {
 // GROQ AI
 // ═══════════════════════════════════════════════════════════════
 async function groqChat(messages, model, maxTokens) {
-  const key = (_groqKey || '').replace(/\s+/g, '');
-  if (!key) throw new Error('No Groq API key set. Please add your key in Settings → API Keys.');
   let res;
   try {
-    res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    res = await fetch(WORKERS.groq, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: model || 'llama-3.3-70b-versatile', max_tokens: maxTokens || 800, messages, temperature: 0.3 })
     });
   } catch (networkErr) {
-    throw new Error('Network error reaching Groq — check your internet connection. (' + networkErr.message + ')');
+    throw new Error('Network error reaching Groq worker — check your connection. (' + networkErr.message + ')');
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     const msg = err.error?.message || res.statusText;
-    if (res.status === 401) throw new Error('Groq key rejected (401) — re-enter your key in Settings. ' + msg);
+    if (res.status === 401) throw new Error('Groq worker rejected request (401): ' + msg);
     if (res.status === 429) throw new Error('Groq rate limit reached (429) — wait a moment and try again.');
-    throw new Error('Groq error ' + res.status + ': ' + msg);
+    throw new Error('Groq worker error ' + res.status + ': ' + msg);
   }
   const data = await res.json();
   return data.choices?.[0]?.message?.content || '';
@@ -1128,23 +1086,42 @@ async function groqJSON(messages, model, maxTokens) {
   catch { const m = clean.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); throw new Error('JSON parse failed: ' + clean.slice(0, 100)); }
 }
 
-async function testGroqKey() {
-  const btn = document.getElementById('groq-test-btn');
-  const res = document.getElementById('groq-test-result');
-  if (!_groqKey) { res.style.color = 'var(--red)'; res.textContent = '✗ No key saved yet'; return; }
+async function runConnectionTest(btnId, resultId, testFn) {
+  const btn = document.getElementById(btnId);
+  const res = document.getElementById(resultId);
   btn.disabled = true; btn.textContent = 'Testing…';
   res.style.color = 'var(--text-3)'; res.textContent = '';
   try {
-    const reply = await groqChat([{ role: 'user', content: 'Reply with the single word: OK' }], 'llama-3.1-8b-instant', 10);
-    if (reply.trim().includes('OK') || reply.length > 0) {
-      res.style.color = 'var(--green)'; res.textContent = '\u2713 Connected — key works!';
-    } else {
-      res.style.color = 'var(--amber)'; res.textContent = '\u26A0 Unexpected response: ' + reply.slice(0,40);
-    }
+    const msg = await testFn();
+    res.style.color = 'var(--green)'; res.textContent = '✓ ' + msg;
   } catch(e) {
-    res.style.color = 'var(--red)'; res.textContent = '\u2717 ' + e.message;
+    res.style.color = 'var(--red)'; res.textContent = '✗ ' + e.message;
   }
-  btn.disabled = false; btn.textContent = 'Test connection';
+  btn.disabled = false; btn.textContent = 'Test';
+}
+
+async function testGroqConnection() {
+  await runConnectionTest('groq-test-btn', 'groq-test-result', async () => {
+    const reply = await groqChat([{ role: 'user', content: 'Reply with the single word: OK' }], 'llama-3.1-8b-instant', 10);
+    if (!reply || !reply.length) throw new Error('Empty response from worker');
+    return 'Connected';
+  });
+}
+
+async function testFiscalConnection() {
+  await runConnectionTest('fiscal-test-btn', 'fiscal-test-result', async () => {
+    const data = await fiscalGet('/company/search?query=Apple&limit=1');
+    if (!data || (Array.isArray(data) && !data.length)) throw new Error('No data returned');
+    return 'Connected';
+  });
+}
+
+async function testFmpConnection() {
+  await runConnectionTest('fmp-test-btn', 'fmp-test-result', async () => {
+    const data = await fmpGet('/v3/profile/AAPL');
+    if (!Array.isArray(data) || !data[0]?.symbol) throw new Error('No data returned');
+    return 'Connected — ' + data[0].companyName;
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1226,7 +1203,7 @@ Respond ONLY with valid JSON, no markdown:
 }
 
 async function runScan() {
-  if (!_groqKey) { alert('Please add your Groq API key in Settings → API Keys first.'); showPage('settings'); return; }
+  // No key check needed — Groq worker handles auth
   if (!scanQueue.length) return;
   const btn = document.getElementById('scan-run-btn');
   btn.disabled = true;
@@ -1309,7 +1286,7 @@ let _indexCandidates = [];
 function openIndexScan(indexKey) {
   const stocks = INDEXES[indexKey];
   if (!stocks) return;
-  if (!_groqKey) { alert('Please add your Groq API key in Settings → API Keys first.'); showPage('settings'); return; }
+  // No key check needed — Groq worker handles auth
   _indexScanAborted = false;
   _indexCandidates = [];
   const modal  = document.getElementById('index-modal');
@@ -1470,13 +1447,13 @@ async function refreshWatchlist() {
     try {
       // Try fiscal.ai price first, then FMP, then Yahoo
       let priceData = null;
-      if (_fiscalKey && !_fiscalRateLimited && stock.ticker) {
+      if (!_fiscalRateLimited && stock.ticker) {
         const exch = stock.exchange || 'NASDAQ';
         const raw = await fiscalGet('/stock-prices/eod?companyKey=' + exch + '_' + stock.ticker + '&limit=1').catch(() => null);
         const latest = Array.isArray(raw?.data) ? raw.data[0] : (Array.isArray(raw) ? raw[0] : null);
         if (latest?.close) priceData = { price: latest.close, currency: stock.currency };
       }
-      if (!priceData && _fmpKey && stock.ticker) {
+      if (!priceData && stock.ticker) {
         const profile = await fmpGet('/v3/profile/' + stock.ticker).catch(() => []);
         const p = Array.isArray(profile) ? profile[0] : null;
         if (p?.price) priceData = { price: p.price, currency: p.currency || stock.currency };
@@ -1504,19 +1481,24 @@ async function refreshWatchlist() {
 // ═══════════════════════════════════════════════════════════════
 // REAL DATA APIs (Fiscal.ai primary, FMP fallback)
 // ═══════════════════════════════════════════════════════════════
-function fiscalUrl(path) {
-  const sep = path.includes('?') ? '&' : '?';
-  return 'https://api.fiscal.ai/v1' + path + sep + 'apiKey=' + _fiscalKey;
-}
 async function fiscalGet(path) {
-  const res = await fetch(fiscalUrl(path));
+  let res;
+  try {
+    res = await fetch(WORKERS.fiscal, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+  } catch (networkErr) {
+    throw new Error('Network error reaching Fiscal.ai worker. (' + networkErr.message + ')');
+  }
   if (res.status === 429) {
     _fiscalRateLimited = true;
     _fiscalRateLimitResetAt = Date.now() + 3600000;
     updateFiscalStatus();
     throw Object.assign(new Error('fiscal_rate_limited'), { rateLimited: true });
   }
-  if (!res.ok) throw new Error('Fiscal.ai ' + res.status + ': ' + path);
+  if (!res.ok) throw new Error('Fiscal.ai worker ' + res.status + ': ' + path);
   return res.json();
 }
 
@@ -1603,9 +1585,17 @@ async function fetchFiscalData(nameOrTicker) {
 }
 
 async function fmpGet(path) {
-  const sep = path.includes('?') ? '&' : '?';
-  const res = await fetch('https://financialmodelingprep.com/api' + path + sep + 'apikey=' + _fmpKey);
-  if (!res.ok) throw new Error('FMP ' + res.status);
+  let res;
+  try {
+    res = await fetch(WORKERS.fmp, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+  } catch (networkErr) {
+    throw new Error('Network error reaching FMP worker. (' + networkErr.message + ')');
+  }
+  if (!res.ok) throw new Error('FMP worker ' + res.status + ': ' + path);
   return res.json();
 }
 
@@ -1673,12 +1663,13 @@ async function fetchFMPData(nameOrTicker) {
 }
 
 async function fetchRealData(nameOrTicker) {
-  if (_fiscalKey && !_fiscalRateLimited) {
+  // Try Fiscal.ai worker first, fall back to FMP worker on rate limit or error
+  if (!_fiscalRateLimited) {
     try { return { ...(await fetchFiscalData(nameOrTicker)), _dataSource: 'fiscal' }; }
     catch (e) { if (!e.rateLimited) console.warn('[Fiscal.ai]', e.message); }
   }
-  if (_fmpKey) return { ...(await fetchFMPData(nameOrTicker)), _dataSource: _fiscalRateLimited ? 'fmp-fallback' : 'fmp' };
-  throw Object.assign(new Error('no-key'), { noKey: true });
+  try { return { ...(await fetchFMPData(nameOrTicker)), _dataSource: _fiscalRateLimited ? 'fmp-fallback' : 'fmp' }; }
+  catch (e) { throw new Error('Both Fiscal.ai and FMP workers failed: ' + e.message); }
 }
 
 async function fetchCurrentPrice(ticker) {
@@ -1719,12 +1710,12 @@ async function showStockDetail(name, fromPage) {
   let aiData   = null;
 
   const [rd, ad] = await Promise.allSettled([
-    (_fiscalKey || _fmpKey) ? fetchRealData(name) : Promise.reject(Object.assign(new Error('no-key'), { noKey: true })),
+    fetchRealData(name),
     fetchStockDetailAI(name, scanData)
   ]);
 
   if (rd.status === 'fulfilled') realData = rd.value;
-  else { realError = rd.reason?.noKey ? 'no-key' : rd.reason?.message || 'fetch failed'; }
+  else { realError = rd.reason?.message || 'fetch failed'; }
   if (ad.status === 'fulfilled') aiData = ad.value;
 
   const d = buildStockDetailData(name, scanData, realData, aiData, realError);
@@ -1748,7 +1739,6 @@ async function showStockDetail(name, fromPage) {
 }
 
 async function fetchStockDetailAI(name, scanData) {
-  if (!_groqKey) return null;
   const prompt = `You are a quality investing analyst. Provide a detailed qualitative analysis of "${name}" for a long-term quality investor.
 
 Do NOT include any financial figures, price targets, or valuation numbers — those come from a data source.
@@ -1804,7 +1794,7 @@ function renderStockDetail(d) {
     <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px">
       <div style="font-size:20px">📡</div>
       <div><div style="font-size:12px;font-weight:600;color:var(--amber);margin-bottom:4px">Real financial data unavailable</div>
-      <div style="font-size:11px;color:var(--text-3);line-height:1.6">${d._realError === 'no-key' ? 'Add a <strong style="color:var(--text-2)">Fiscal.ai</strong> or <strong style="color:var(--text-2)">FMP key</strong> in Settings → API Keys to see real financials, analyst targets, and P/E history.' : 'Could not fetch data: <span style="color:var(--red)">' + (d._realError||'unknown error') + '</span>'}</div></div>
+      <div style="font-size:11px;color:var(--text-3);line-height:1.6">${d._realError ? 'Could not fetch data: <span style="color:var(--red)">' + d._realError + '</span>' : 'Check your Cloudflare Worker connections in Settings.'}</div></div>
     </div>` : (d._dataSource === 'fmp-fallback' ? `
     <div style="background:rgba(79,124,247,.06);border:1px solid rgba(79,124,247,.15);border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px">
       <div style="font-size:20px">⚡</div>
@@ -1981,10 +1971,7 @@ const LS = {
 };
 
 function persistAll() {
-  // Keys
-  if (_groqKey)   LS.set('groqKey',   _groqKey);
-  if (_fiscalKey) LS.set('fiscalKey', _fiscalKey);
-  if (_fmpKey)    LS.set('fmpKey',    _fmpKey);
+  // Keys stored in Cloudflare Workers, not in app
   // Settings
   LS.set('settings', _settings);
   // Watchlist (already saved per-change but keep in sync)
@@ -1998,9 +1985,7 @@ function persistPortfolio() {
 
 function restoreAll() {
   // Keys
-  const gk = LS.get('groqKey');   if (gk)  { _groqKey   = String(gk).replace(/\s+/g,'');  }
-  const fk = LS.get('fiscalKey'); if (fk)  { _fiscalKey = String(fk).replace(/\s+/g,''); }
-  const mk = LS.get('fmpKey');    if (mk)  { _fmpKey    = String(mk).replace(/\s+/g,''); }
+  // Keys stored in Cloudflare Workers — nothing to restore
   // Settings
   const s = LS.get('settings');
   if (s) Object.assign(_settings, s);
@@ -2020,12 +2005,7 @@ function restoreAll() {
 }
 
 // ── Patch save functions to auto-persist ──────────────────────
-const _origSaveGroq   = saveGroqKey;
-const _origSaveFiscal = saveFiscalKey;
-const _origSaveFmp    = saveFmpKey;
-saveGroqKey   = function() { _origSaveGroq();   LS.set('groqKey',   _groqKey); };
-saveFiscalKey = function() { _origSaveFiscal(); LS.set('fiscalKey', _fiscalKey); };
-saveFmpKey    = function() { _origSaveFmp();    LS.set('fmpKey',    _fmpKey); };
+// Key patching removed — keys live in Cloudflare Workers
 
 // Patch portfolio upload handlers to auto-persist after load
 const _origHandlePortfolio = handlePortfolioFile;
@@ -2064,11 +2044,9 @@ saveWatchlist = function() { _origSaveWL(); LS.set('watchlist', watchlist); };
 
 function clearAllPersistedData() {
   if (!confirm('This will remove ALL saved data — API keys, portfolio, transactions and watchlist. Are you sure?')) return;
-  ['groqKey','fiscalKey','fmpKey','settings','watchlist','portfolioRows','txRows'].forEach(k => LS.del(k));
-  _groqKey = ''; _fiscalKey = ''; _fmpKey = '';
+  ['settings','watchlist','portfolioRows','txRows'].forEach(k => LS.del(k));
   watchlist = []; portfolioRows = null; txRows = null;
   Object.assign(_settings, { autoWatchlist:false, concurrency:3, currency:'EUR', privacyMode:false });
-  updateGroqStatus(); updateFiscalStatus(); updateFmpStatus();
   updateWatchlistBadge();
   refreshSettingsUI();
   showPage('dashboard');
