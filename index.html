@@ -1110,15 +1110,16 @@ async function testGroqConnection() {
 
 async function testFiscalConnection() {
   await runConnectionTest('fiscal-test-btn', 'fiscal-test-result', async () => {
-    const data = await fiscalGet('/company/search?query=Apple&limit=1');
-    if (!data || (Array.isArray(data) && !data.length)) throw new Error('No data returned');
+    const data = await fiscalPost({ query: 'Apple', type: 'search', limit: 1 });
+    const list = Array.isArray(data) ? data : (data?.data || data?.results || []);
+    if (!list.length) throw new Error('No data returned');
     return 'Connected';
   });
 }
 
 async function testFmpConnection() {
   await runConnectionTest('fmp-test-btn', 'fmp-test-result', async () => {
-    const data = await fmpGet('/v3/profile/AAPL');
+    const data = await fmpGet('/profile/AAPL');
     if (!Array.isArray(data) || !data[0]?.symbol) throw new Error('No data returned');
     return 'Connected — ' + data[0].companyName;
   });
@@ -1448,13 +1449,13 @@ async function refreshWatchlist() {
       // Try fiscal.ai price first, then FMP, then Yahoo
       let priceData = null;
       if (!_fiscalRateLimited && stock.ticker) {
-        const exch = stock.exchange || 'NASDAQ';
-        const raw = await fiscalGet('/stock-prices/eod?companyKey=' + exch + '_' + stock.ticker + '&limit=1').catch(() => null);
+        const companyKey = (stock.exchange || 'NASDAQ') + '_' + stock.ticker;
+        const raw = await fiscalPost({ query: stock.ticker, type: 'price', companyKey, limit: 1 }).catch(() => null);
         const latest = Array.isArray(raw?.data) ? raw.data[0] : (Array.isArray(raw) ? raw[0] : null);
         if (latest?.close) priceData = { price: latest.close, currency: stock.currency };
       }
       if (!priceData && stock.ticker) {
-        const profile = await fmpGet('/v3/profile/' + stock.ticker).catch(() => []);
+        const profile = await fmpGet('/profile/' + stock.ticker).catch(() => []);
         const p = Array.isArray(profile) ? profile[0] : null;
         if (p?.price) priceData = { price: p.price, currency: p.currency || stock.currency };
       }
@@ -1481,13 +1482,14 @@ async function refreshWatchlist() {
 // ═══════════════════════════════════════════════════════════════
 // REAL DATA APIs (Fiscal.ai primary, FMP fallback)
 // ═══════════════════════════════════════════════════════════════
-async function fiscalGet(path) {
+async function fiscalPost(queryBody) {
+  // Sends queryBody directly to the worker, which forwards it to api.fiscal.ai/v1/query
   let res;
   try {
     res = await fetch(WORKERS.fiscal, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path })
+      body: JSON.stringify(queryBody)
     });
   } catch (networkErr) {
     throw new Error('Network error reaching Fiscal.ai worker. (' + networkErr.message + ')');
@@ -1498,23 +1500,17 @@ async function fiscalGet(path) {
     updateFiscalStatus();
     throw Object.assign(new Error('fiscal_rate_limited'), { rateLimited: true });
   }
-  if (!res.ok) throw new Error('Fiscal.ai worker ' + res.status + ': ' + path);
+  if (!res.ok) throw new Error('Fiscal.ai worker ' + res.status);
   return res.json();
 }
 
 async function fiscalResolveCompanyKey(nameOrTicker) {
-  if (nameOrTicker.includes('_')) return nameOrTicker.toUpperCase();
-  const upper = nameOrTicker.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const exchanges = ['NASDAQ','NYSE','AMEX','LSE','XETRA','AMS','EPA','STO','OSL','TSX'];
-  for (const ex of exchanges) {
-    try {
-      const data = await fiscalGet('/company/profile?companyKey=' + ex + '_' + upper);
-      if (data?.companyKey || data?.ticker || data?.name) return ex + '_' + upper;
-    } catch (e) { if (e.rateLimited) throw e; }
-  }
-  const results = await fiscalGet('/company/search?query=' + encodeURIComponent(nameOrTicker) + '&limit=3');
-  if (Array.isArray(results) && results[0]?.companyKey) return results[0].companyKey;
-  if (Array.isArray(results) && results[0]?.ticker && results[0]?.exchange) return results[0].exchange + '_' + results[0].ticker;
+  // Search by name/ticker and return the best companyKey
+  const results = await fiscalPost({ query: nameOrTicker, type: 'search', limit: 3 });
+  const list = Array.isArray(results) ? results : (results?.data || results?.results || []);
+  if (list[0]?.companyKey) return list[0].companyKey;
+  if (list[0]?.ticker && list[0]?.exchange) return list[0].exchange + '_' + list[0].ticker;
+  if (list[0]?.ticker) return list[0].ticker;
   throw new Error('Fiscal.ai: no results for "' + nameOrTicker + '"');
 }
 
@@ -1526,9 +1522,9 @@ async function fetchFiscalData(nameOrTicker) {
 
   const companyKey = await fiscalResolveCompanyKey(nameOrTicker);
   const [profile, ratiosRaw, priceRaw] = await Promise.all([
-    fiscalGet('/company/profile?companyKey=' + companyKey),
-    fiscalGet('/financials/ratios?companyKey=' + companyKey + '&period=annual&limit=11').catch(() => null),
-    fiscalGet('/stock-prices/eod?companyKey=' + companyKey + '&limit=1').catch(() => null),
+    fiscalPost({ query: nameOrTicker, type: 'profile',  companyKey }),
+    fiscalPost({ query: nameOrTicker, type: 'financials', companyKey, period: 'annual', limit: 11 }).catch(() => null),
+    fiscalPost({ query: nameOrTicker, type: 'price',    companyKey, limit: 1 }).catch(() => null),
   ]);
 
   const p = profile || {};
@@ -1585,13 +1581,12 @@ async function fetchFiscalData(nameOrTicker) {
 }
 
 async function fmpGet(path) {
+  // Worker accepts GET: fetch(WORKERS.fmp + path)
+  // Worker base URL is https://financialmodelingprep.com/api/v3 so paths must NOT include /v3
+  // e.g. fmpGet('/profile/AAPL') → worker fetches /api/v3/profile/AAPL
   let res;
   try {
-    res = await fetch(WORKERS.fmp, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path })
-    });
+    res = await fetch(WORKERS.fmp + path, { method: 'GET' });
   } catch (networkErr) {
     throw new Error('Network error reaching FMP worker. (' + networkErr.message + ')');
   }
@@ -1602,21 +1597,22 @@ async function fmpGet(path) {
 async function fetchFMPData(nameOrTicker) {
   const cacheKey = nameOrTicker.toLowerCase();
   if (_fmpCache[cacheKey]) return _fmpCache[cacheKey];
-  let profileArr = await fmpGet('/v3/profile/' + encodeURIComponent(nameOrTicker.toUpperCase())).catch(() => []);
+  let profileArr = await fmpGet('/profile/' + encodeURIComponent(nameOrTicker.toUpperCase())).catch(() => []);
   let ticker = Array.isArray(profileArr) && profileArr[0]?.symbol ? profileArr[0].symbol : null;
   if (!ticker) {
-    const results = await fmpGet('/v3/search?query=' + encodeURIComponent(nameOrTicker) + '&limit=3').catch(() => []);
+    const results = await fmpGet('/search?query=' + encodeURIComponent(nameOrTicker) + '&limit=3').catch(() => []);
     if (!results?.length) throw new Error('No FMP results for "' + nameOrTicker + '"');
     ticker = results[0].symbol;
-    profileArr = await fmpGet('/v3/profile/' + ticker).catch(() => []);
+    profileArr = await fmpGet('/profile/' + ticker).catch(() => []);
   }
   const [ratios, targets] = await Promise.all([
-    fmpGet('/v3/ratios/' + ticker + '?limit=11'),
-    fmpGet('/v4/analyst-price-target-summary/' + ticker).catch(() => [])
+    fmpGet('/ratios/' + ticker + '?limit=11'),
+    fmpGet('/analyst-price-targets?symbol=' + ticker + '&limit=5').catch(() => [])
   ]);
   const p   = Array.isArray(profileArr) ? profileArr[0] : (profileArr || {});
   const rat = Array.isArray(ratios) ? ratios : [];
-  const tgt = Array.isArray(targets) ? targets[0] : (targets || null);
+  // /analyst-price-targets returns array of { targetHigh, targetLow, targetMean, targetConsensus, analystCount }
+  const tgt = Array.isArray(targets) && targets.length ? targets[0] : null;
   const latestRat = rat[0] || {};
   const prevRat   = rat[1] || {};
 
@@ -1653,7 +1649,7 @@ async function fetchFMPData(nameOrTicker) {
       debtToEquity: latestRat.debtEquityRatio != null ? latestRat.debtEquityRatio.toFixed(2) : null,
       dividendYield: latestRat.dividendYield ? (latestRat.dividendYield*100).toFixed(2)+'%' : null,
     },
-    analystTargets: tgt ? { low: tgt.lastMonthLowPrice||tgt.allTimeLow||null, mean: tgt.lastMonthAvgPrice||tgt.allTimeAvg||null, high: tgt.lastMonthHighPrice||tgt.allTimeHigh||null, numAnalysts: tgt.lastMonthNumberOfAnalysts||tgt.totalAnalysts||null, consensus: tgt.consensus||null } : null,
+    analystTargets: tgt ? { low: tgt.targetLow||tgt.allTimeLow||null, mean: tgt.targetMean||tgt.allTimeAvg||null, high: tgt.targetHigh||tgt.allTimeHigh||null, numAnalysts: tgt.analystCount||tgt.totalAnalysts||null, consensus: tgt.targetConsensus||tgt.consensus||null } : null,
     peHistory: (peAnnual.length && forwardPE) ? { forwardPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
     _source: 'fmp',
   };
