@@ -1110,10 +1110,18 @@ async function testGroqConnection() {
 
 async function testFiscalConnection() {
   await runConnectionTest('fiscal-test-btn', 'fiscal-test-result', async () => {
-    const data = await fiscalGet('/v2/company/profile?companyKey=NASDAQ_AAPL&figi=BBG000B9XRY4');
-    if (!data || (Array.isArray(data) && !data.length)) throw new Error('No data returned');
-    const name = Array.isArray(data) ? data[0]?.name : data?.name;
-    return 'Connected' + (name ? ' — ' + name : '');
+    // Step 1: test companies-list
+    const listResp = await fiscalGet('/v2/companies-list?pageSize=5&page=1');
+    const list = listResp?.data || (Array.isArray(listResp) ? listResp : []);
+    if (!list.length) throw new Error('companies-list returned no data');
+    // Step 2: test profile using real companyKey + figi from the list
+    const co = list[0];
+    const companyKey = co.exchangeSymbol + '_' + co.ticker;
+    const figiParam  = co.figi ? '&figi=' + co.figi : '';
+    const profile = await fiscalGet('/v2/company/profile?companyKey=' + companyKey + figiParam);
+    if (!profile || (Array.isArray(profile) && !profile.length)) throw new Error('profile returned no data');
+    const name = Array.isArray(profile) ? profile[0]?.companyName : profile?.companyName;
+    return 'Connected — ' + (name || companyKey);
   });
 }
 
