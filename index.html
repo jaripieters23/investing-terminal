@@ -1110,7 +1110,7 @@ async function testGroqConnection() {
 
 async function testFiscalConnection() {
   await runConnectionTest('fiscal-test-btn', 'fiscal-test-result', async () => {
-    const data = await fiscalGet('/v2/company/profile?companyKey=NASDAQ_AAPL');
+    const data = await fiscalGet('/v2/company/profile?companyKey=NASDAQ_AAPL&figi=BBG000B9XRY4');
     if (!data || (Array.isArray(data) && !data.length)) throw new Error('No data returned');
     const name = Array.isArray(data) ? data[0]?.name : data?.name;
     return 'Connected' + (name ? ' — ' + name : '');
@@ -1119,9 +1119,9 @@ async function testFiscalConnection() {
 
 async function testFmpConnection() {
   await runConnectionTest('fmp-test-btn', 'fmp-test-result', async () => {
-    const data = await fmpGet('/quote/AAPL');
+    const data = await fmpGet('/stable/profile?symbol=AAPL');
     if (!Array.isArray(data) || !data[0]?.symbol) throw new Error('No data returned');
-    return 'Connected — ' + data[0].name + ' $' + data[0].price;
+    return 'Connected — ' + data[0].companyName + ' $' + data[0].price;
   });
 }
 
@@ -1449,13 +1449,13 @@ async function refreshWatchlist() {
       // Try fiscal.ai price first, then FMP, then Yahoo
       let priceData = null;
       if (!_fiscalRateLimited && stock.ticker) {
-        const companyKey = (stock.exchange || 'NASDAQ') + '_' + stock.ticker;
-        const raw = await fiscalGet('/v2/company/profile?companyKey=' + companyKey).catch(() => null);
-        const prof = Array.isArray(raw) ? raw[0] : raw;
-        if (prof?.price) priceData = { price: prof.price, currency: prof.currency || stock.currency };
+        const ck = (stock.exchange || 'NASDAQ') + '_' + stock.ticker;
+        const priceRaw = await fiscalGet('/v2/stock-prices?companyKey=' + ck + '&limit=1').catch(() => null);
+        const px = Array.isArray(priceRaw) ? priceRaw[0] : priceRaw?.data?.[0];
+        if (px?.close) priceData = { price: px.close, currency: stock.currency };
       }
       if (!priceData && stock.ticker) {
-        const qt = await fmpGet('/quote/' + stock.ticker).catch(() => []);
+        const qt = await fmpGet('/stable/quote?symbol=' + stock.ticker).catch(() => []);
         const p = Array.isArray(qt) ? qt[0] : null;
         if (p?.price) priceData = { price: p.price, currency: p.currency || stock.currency };
       }
@@ -1504,22 +1504,20 @@ async function fiscalGet(path) {
   return res.json();
 }
 
-async function fiscalResolveCompanyKey(nameOrTicker) {
-  // /v2/companies-list returns all companies with their companyKey (format: EXCHANGE_TICKER)
-  // We filter client-side for the best match
+async function fiscalResolveCompany(nameOrTicker) {
+  // companies-list: { pagination, data: [{ ticker, figi, exchangeSymbol, name, ... }] }
+  // companyKey format = exchangeSymbol + "_" + ticker  e.g. "NASDAQ_MSFT"
   const upper = nameOrTicker.toUpperCase().replace(/[^A-Z0-9.]/g, "");
-  const data = await fiscalGet("/v2/companies-list");
-  const list = Array.isArray(data) ? data : (data?.data || data?.results || []);
+  const lower = nameOrTicker.toLowerCase();
+
+  // Fetch page 1 (up to 1000 entries) — no server-side filtering documented
+  const resp = await fiscalGet("/v2/companies-list?pageSize=1000&page=1");
+  const list = resp?.data || (Array.isArray(resp) ? resp : []);
   if (!list.length) throw new Error("Fiscal.ai: empty companies list");
-  // 1. Exact ticker match
-  let match = list.find(r => r.ticker?.toUpperCase() === upper);
-  // 2. companyKey ends with _TICKER
-  if (!match) match = list.find(r => r.companyKey?.toUpperCase().endsWith("_" + upper));
-  // 3. Name contains the search term
-  if (!match) {
-    const lower = nameOrTicker.toLowerCase();
-    match = list.find(r => r.name?.toLowerCase().includes(lower));
-  }
+
+  // Priority: exact ticker match > name includes search term
+  const match = list.find(r => r.ticker?.toUpperCase() === upper)
+    || list.find(r => r.name?.toLowerCase().includes(lower));
   if (!match) throw new Error("Fiscal.ai: no match for \"" + nameOrTicker + "\"");
   return match;
 }
@@ -1530,24 +1528,36 @@ async function fetchFiscalData(nameOrTicker) {
   if (_fiscalRateLimited && Date.now() > _fiscalRateLimitResetAt) { _fiscalRateLimited = false; updateFiscalStatus(); }
   if (_fiscalRateLimited) throw Object.assign(new Error("fiscal_rate_limited"), { rateLimited: true });
 
-  // Step 1: resolve companyKey (e.g. NASDAQ_MSFT)
-  const company   = await fiscalResolveCompanyKey(nameOrTicker);
-  const companyKey = company.companyKey;
-  const ticker     = company.ticker || companyKey.split("_").slice(1).join("_");
+  // Step 1: get ticker, figi, exchangeSymbol from companies-list
+  const company    = await fiscalResolveCompany(nameOrTicker);
+  const ticker     = company.ticker;
+  const figi       = company.figi;
+  // companyKey = exchangeSymbol_ticker (e.g. NASDAQ_MSFT) as per Fiscal.ai docs
+  const companyKey = company.exchangeSymbol + "_" + ticker;
 
-  // Step 2: fetch profile + financials in parallel
-  const [profile, income, ratios] = await Promise.all([
-    fiscalGet("/v2/company/profile?companyKey=" + companyKey),
-    fiscalGet("/v1/company/financials/income-statement/as-reported?companyKey=" + companyKey + "&period=annual&limit=10").catch(() => null),
+  // Step 2: fetch all endpoints in parallel
+  // - v2/company/profile: requires companyKey + figi
+  // - v1 financials: income-statement, cash-flow-statement, ratios — all use companyKey
+  // - v2/stock-prices: latest EOD price
+  const figiParam = figi ? "&figi=" + figi : "";
+  const [profile, income, cashflow, ratios, priceResp] = await Promise.all([
+    fiscalGet("/v2/company/profile?companyKey=" + companyKey + figiParam),
+    fiscalGet("/v1/company/financials/income-statement?companyKey=" + companyKey + "&period=annual&limit=10").catch(() => null),
+    fiscalGet("/v1/company/financials/cash-flow-statement?companyKey=" + companyKey + "&period=annual&limit=2").catch(() => null),
     fiscalGet("/v1/company/financials/ratios?companyKey=" + companyKey + "&period=annual&limit=10").catch(() => null),
+    fiscalGet("/v2/stock-prices?companyKey=" + companyKey + "&limit=1").catch(() => null),
   ]);
 
-  const p    = (Array.isArray(profile) ? profile[0] : profile) || {};
-  const incs = Array.isArray(income)  ? income  : (income?.data  || []);
-  const rats = Array.isArray(ratios)  ? ratios  : (ratios?.data  || []);
+  // Normalise response shapes — all may be { data: [] } or bare arrays
+  const p    = (Array.isArray(profile)  ? profile[0]  : profile?.data?.[0]  || profile)  || {};
+  const incs = (Array.isArray(income)   ? income      : income?.data   || []);
+  const cfs  = (Array.isArray(cashflow) ? cashflow     : cashflow?.data || []);
+  const rats = (Array.isArray(ratios)   ? ratios       : ratios?.data   || []);
+  const px   = (Array.isArray(priceResp)? priceResp[0] : priceResp?.data?.[0] || null);
 
   const latestInc = incs[0] || {};
   const prevInc   = incs[1] || {};
+  const latestCf  = cfs[0]  || {};
   const latestRat = rats[0] || {};
 
   function fmt(n) {
@@ -1559,67 +1569,81 @@ async function fetchFiscalData(nameOrTicker) {
     return n.toLocaleString();
   }
 
+  // Revenue growth from income statement
   const rev     = latestInc.revenue || latestInc.totalRevenue;
   const prevRev = prevInc.revenue   || prevInc.totalRevenue;
   const revGrowth = rev && prevRev && prevRev !== 0
     ? (((rev - prevRev) / Math.abs(prevRev)) * 100).toFixed(1) + "%" : null;
-  const fcf = latestInc.freeCashFlow || latestInc.operatingCashFlow;
-  const fcfMargin = fcf && rev && rev !== 0 ? (fcf / rev * 100).toFixed(1) + "%" : null;
 
+  // FCF margin from cash flow statement
+  const fcf = latestCf.freeCashFlow
+    || (latestCf.operatingCashFlow && latestCf.capitalExpenditure
+        ? latestCf.operatingCashFlow - Math.abs(latestCf.capitalExpenditure) : null);
+  const fcfMargin = fcf != null && rev ? (fcf / rev * 100).toFixed(1) + "%" : null;
+
+  // P/E history from ratios
   const peRatioVal = latestRat.peRatio || latestRat.priceEarningsRatio || p.peRatio;
-  const peAnnual   = rats.slice(0,10)
+  const peAnnual   = rats.slice(0, 10)
     .filter(r => { const pe = r.peRatio || r.priceEarningsRatio; return pe > 0 && pe < 300; })
     .map(r => {
       const pe = r.peRatio || r.priceEarningsRatio;
-      const yr = parseInt(r.fiscalYear || r.calendarYear || r.date?.slice(0,4));
+      const yr = parseInt(r.fiscalYear || r.calendarYear || r.date?.slice(0, 4));
       return { year: yr, pe: +pe.toFixed(1) };
     }).filter(r => r.year).reverse();
   const historicPEs = peAnnual.map(r => r.pe);
-  const tenYearAvg  = historicPEs.length ? +(historicPEs.reduce((a,b) => a+b,0)/historicPEs.length).toFixed(1) : null;
-  const forwardPE   = peRatioVal ? +peRatioVal.toFixed(1) : null;
+  const tenYearAvg  = historicPEs.length
+    ? +(historicPEs.reduce((a, b) => a + b, 0) / historicPEs.length).toFixed(1) : null;
+  const forwardPE = peRatioVal ? +peRatioVal.toFixed(1) : null;
+
+  // Live price from v2/stock-prices (close price of latest EOD entry)
+  const livePrice = px?.close || px?.adjustedClose || p.price || p.lastPrice || null;
 
   const result = {
     ticker,
     name:        p.companyName || p.name || company.name || nameOrTicker,
-    exchange:    p.exchange    || company.exchange || companyKey.split("_")[0] || null,
-    currency:    p.currency   || company.currency || null,
-    sector:      p.sector     || company.sector   || null,
-    industry:    p.industry   || company.industry || null,
-    country:     p.country    || company.country  || null,
+    exchange:    company.exchangeSymbol || p.exchange || null,
+    currency:    company.tradingCurrency || p.currency || null,
+    sector:      company.sector    || p.sector    || null,
+    industry:    company.industry  || p.industry  || null,
+    country:     company.countryName || p.country || null,
     employees:   p.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
     description: p.description || null,
-    livePrice:   p.price || p.lastPrice || p.currentPrice || null,
+    livePrice,
     financials: {
       marketCap:     fmt(p.marketCap || p.mktCap),
       revenue:       fmt(rev),
       revenueGrowth: revGrowth,
       netIncome:     fmt(latestInc.netIncome),
       fcfMargin,
-      roic:          latestRat.returnOnCapitalEmployed != null ? (latestRat.returnOnCapitalEmployed*100).toFixed(1)+"%" : null,
+      roic:          latestRat.returnOnCapitalEmployed != null
+        ? (latestRat.returnOnCapitalEmployed * 100).toFixed(1) + "%" : null,
       peRatio:       peRatioVal ? peRatioVal.toFixed(1) : null,
-      evEbitda:      latestRat.enterpriseValueEbitda ? latestRat.enterpriseValueEbitda.toFixed(1) : null,
+      evEbitda:      latestRat.evToEbitda || latestRat.enterpriseValueEbitda
+        ? (latestRat.evToEbitda || latestRat.enterpriseValueEbitda).toFixed(1) : null,
       debtToEquity:  latestRat.debtToEquity ? latestRat.debtToEquity.toFixed(2) : null,
-      dividendYield: latestRat.dividendYield ? (latestRat.dividendYield*100).toFixed(2)+"%" : null,
+      dividendYield: latestRat.dividendYield
+        ? (latestRat.dividendYield * 100).toFixed(2) + "%" : null,
     },
     analystTargets: (p.priceTarget || p.analystTargetPrice) ? {
-      low:         p.priceTargetLow  || null,
-      mean:        p.priceTarget     || p.analystTargetPrice || null,
-      high:        p.priceTargetHigh || null,
-      numAnalysts: p.numberOfAnalysts || null,
-      consensus:   p.analystRating   || null,
+      low:         p.priceTargetLow        || null,
+      mean:        p.priceTarget           || p.analystTargetPrice || null,
+      high:        p.priceTargetHigh       || null,
+      numAnalysts: p.numberOfAnalysts      || null,
+      consensus:   p.analystRating        || null,
     } : null,
-    peHistory: (peAnnual.length && forwardPE) ? { forwardPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
+    peHistory: (peAnnual.length && forwardPE)
+      ? { forwardPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
     _source: "fiscal",
   };
+  result._figi = figi;
   _fiscalCache[cacheKey] = result;
   if (ticker) _fiscalCache[ticker.toLowerCase()] = result;
   return result;
 }
 
 async function fmpGet(path) {
-  // Worker accepts GET: fetch(WORKERS.fmp + path)
-  // Worker base URL is https://financialmodelingprep.com/api/v3 so paths must NOT include /v3
-  // e.g. fmpGet('/quote/AAPL') → worker fetches /api/v3/profile/AAPL
+  // Worker forwards GET requests to https://financialmodelingprep.com/api + path
+  // Use /stable/ paths (current FMP API) e.g. fmpGet('/stable/profile?symbol=AAPL')
   let res;
   try {
     res = await fetch(WORKERS.fmp + path, { method: 'GET' });
@@ -1633,60 +1657,106 @@ async function fmpGet(path) {
 async function fetchFMPData(nameOrTicker) {
   const cacheKey = nameOrTicker.toLowerCase();
   if (_fmpCache[cacheKey]) return _fmpCache[cacheKey];
+
+  // Step 1: resolve ticker using /stable/search-name (handles company names + tickers)
   let ticker = nameOrTicker.toUpperCase().replace(/\s+/g, "");
-  const searchResults = await fmpGet("/search?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
+  const searchResults = await fmpGet("/stable/search-name?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
   if (Array.isArray(searchResults) && searchResults.length) {
     const exact = searchResults.find(r => r.symbol?.toUpperCase() === ticker);
     ticker = (exact || searchResults[0]).symbol;
   }
-  const [quote, income, keyMetrics, cashFlow] = await Promise.all([
-    fmpGet("/quote/" + ticker),
-    fmpGet("/income-statement/" + ticker + "?limit=5").catch(() => []),
-    fmpGet("/key-metrics/" + ticker + "?limit=5").catch(() => []),
-    fmpGet("/cash-flow-statement/" + ticker + "?limit=2").catch(() => []),
+
+  // Step 2: fetch all data in parallel using /stable/ endpoints
+  // /stable/profile: full company profile with sector, industry, description, price, mktCap
+  // /stable/income-statement: revenue, netIncome (annual, limit 5)
+  // /stable/cash-flow-statement: freeCashFlow (annual, limit 2)
+  // /stable/key-metrics: peRatio, roic, debtToEquity, evToEbitda (annual, limit 10)
+  // /stable/analyst-estimates: price targets and consensus
+  const [profileArr, income, cashFlow, keyMetrics, analystEst] = await Promise.all([
+    fmpGet("/stable/profile?symbol=" + ticker),
+    fmpGet("/stable/income-statement?symbol=" + ticker + "&period=annual&limit=5").catch(() => []),
+    fmpGet("/stable/cash-flow-statement?symbol=" + ticker + "&period=annual&limit=2").catch(() => []),
+    fmpGet("/stable/key-metrics?symbol=" + ticker + "&period=annual&limit=10").catch(() => []),
+    fmpGet("/stable/analyst-estimates?symbol=" + ticker + "&limit=1").catch(() => []),
   ]);
-  const q = Array.isArray(quote) ? quote[0] : (quote || {});
-  const inc = Array.isArray(income) ? income : [];
-  const km = Array.isArray(keyMetrics) ? keyMetrics : [];
-  const cf = Array.isArray(cashFlow) ? cashFlow : [];
-  const latestInc = inc[0] || {}; const prevInc = inc[1] || {};
-  const latestKm = km[0] || {}; const latestCf = cf[0] || {};
+
+  const p   = Array.isArray(profileArr) ? profileArr[0] : (profileArr || {});
+  const inc = Array.isArray(income)     ? income    : [];
+  const cf  = Array.isArray(cashFlow)   ? cashFlow  : [];
+  const km  = Array.isArray(keyMetrics) ? keyMetrics: [];
+  const ae  = Array.isArray(analystEst) ? analystEst: [];
+
+  const latestInc = inc[0] || {};
+  const prevInc   = inc[1] || {};
+  const latestCf  = cf[0]  || {};
+  const latestKm  = km[0]  || {};
+  const latestAe  = ae[0]  || {};
+
   function fmt(n) {
     if (n == null) return null;
     const abs = Math.abs(n);
     if (abs >= 1e12) return (n/1e12).toFixed(2) + "T";
-    if (abs >= 1e9) return (n/1e9).toFixed(1) + "B";
-    if (abs >= 1e6) return (n/1e6).toFixed(1) + "M";
+    if (abs >= 1e9)  return (n/1e9).toFixed(1) + "B";
+    if (abs >= 1e6)  return (n/1e6).toFixed(1) + "M";
     return n.toLocaleString();
   }
-  const rev = latestInc.revenue; const prevRev = prevInc.revenue;
+
+  const rev     = latestInc.revenue;
+  const prevRev = prevInc.revenue;
   const revGrowth = rev && prevRev && prevRev !== 0
     ? (((rev - prevRev) / Math.abs(prevRev)) * 100).toFixed(1) + "%" : null;
-  const fcf = latestCf.freeCashFlow;
-  const fcfMargin = fcf && rev && rev !== 0 ? (fcf / rev * 100).toFixed(1) + "%" : null;
+
+  const fcf = latestCf.freeCashFlow
+    || (latestCf.operatingCashFlow != null && latestCf.capitalExpenditure != null
+        ? latestCf.operatingCashFlow - Math.abs(latestCf.capitalExpenditure) : null);
+  const fcfMargin = fcf != null && rev ? (fcf / rev * 100).toFixed(1) + "%" : null;
+
   const roic = latestKm.roic != null ? (latestKm.roic * 100).toFixed(1) + "%" : null;
-  const currentPE = q.pe ? +q.pe.toFixed(1) : null;
-  const peAnnual = km.filter(r => r.peRatio > 0 && r.peRatio < 300)
-    .map(r => ({ year: parseInt(r.date?.slice(0,4)), pe: +r.peRatio.toFixed(1) })).filter(r => r.year).reverse();
+
+  // P/E from key-metrics history for PE chart; current PE from profile
+  const currentPE = p.pe ? +p.pe.toFixed(1) : (latestKm.peRatio ? +latestKm.peRatio.toFixed(1) : null);
+  const peAnnual  = km.filter(r => r.peRatio > 0 && r.peRatio < 300)
+    .map(r => ({ year: parseInt(r.date?.slice(0, 4)), pe: +r.peRatio.toFixed(1) }))
+    .filter(r => r.year).reverse();
   const historicPEs = peAnnual.map(r => r.pe);
-  const tenYearAvg = historicPEs.length ? +(historicPEs.reduce((a,b) => a+b,0) / historicPEs.length).toFixed(1) : null;
+  const tenYearAvg  = historicPEs.length
+    ? +(historicPEs.reduce((a, b) => a + b, 0) / historicPEs.length).toFixed(1) : null;
+
+  // Analyst estimates from /stable/analyst-estimates
+  const hasTargets = latestAe.estimatedRevenueLow || latestAe.estimatedEpsAvg;
+  const analystTargets = (p.dcfDiff || latestAe.estimatedRevenueLow) ? {
+    low:         latestAe.estimatedEpsLow       || null,
+    mean:        p.dcf                          || null,
+    high:        latestAe.estimatedEpsHigh      || null,
+    numAnalysts: latestAe.numberAnalystEstimated|| null,
+    consensus:   p.dcfDiff > 0 ? "Buy" : p.dcfDiff < 0 ? "Sell" : null,
+  } : null;
+
   const result = {
-    ticker, name: q.name || nameOrTicker,
-    exchange: q.exchange || null, currency: q.currency || null,
-    sector: null, industry: null, country: null, employees: null, description: null,
-    livePrice: q.price || null,
+    ticker,
+    name:        p.companyName  || nameOrTicker,
+    exchange:    p.exchangeShortName || p.exchange || null,
+    currency:    p.currency     || null,
+    sector:      p.sector       || null,
+    industry:    p.industry     || null,
+    country:     p.country      || null,
+    employees:   p.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
+    description: p.description  || null,
+    livePrice:   p.price        || null,
     financials: {
-      marketCap: fmt(q.marketCap), revenue: fmt(rev), revenueGrowth: revGrowth,
-      netIncome: fmt(latestInc.netIncome), fcfMargin, roic,
-      peRatio: currentPE ? currentPE.toString() : null,
-      evEbitda: latestKm.evToOperatingCashFlow ? latestKm.evToOperatingCashFlow.toFixed(1) : null,
-      debtToEquity: latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
-      dividendYield: q.dividendYield ? (q.dividendYield * 100).toFixed(2) + "%" : null,
+      marketCap:     fmt(p.mktCap),
+      revenue:       fmt(rev),
+      revenueGrowth: revGrowth,
+      netIncome:     fmt(latestInc.netIncome),
+      fcfMargin,
+      roic,
+      peRatio:       currentPE ? currentPE.toString() : null,
+      evEbitda:      latestKm.evToEbitda ? latestKm.evToEbitda.toFixed(1) : null,
+      debtToEquity:  latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
+      dividendYield: p.lastDiv && p.price
+        ? ((p.lastDiv / p.price) * 100).toFixed(2) + "%" : null,
     },
-    analystTargets: (q.yearLow || q.yearHigh) ? {
-      low: q.yearLow||null, mean: q.priceAvg200||null, high: q.yearHigh||null,
-      numAnalysts: null, consensus: null
-    } : null,
+    analystTargets,
     peHistory: (peAnnual.length && currentPE)
       ? { forwardPE: currentPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
     _source: "fmp",
