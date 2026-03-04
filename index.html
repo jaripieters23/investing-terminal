@@ -1127,7 +1127,7 @@ async function testFiscalConnection() {
 
 async function testFmpConnection() {
   await runConnectionTest('fmp-test-btn', 'fmp-test-result', async () => {
-    const data = await fmpGet('/v3/profile/AAPL');
+    const data = await fmpGet('/stable/profile?symbol=AAPL');
     if (!Array.isArray(data) || !data[0]?.symbol) throw new Error('No data returned');
     return 'Connected — ' + data[0].companyName + ' $' + data[0].price;
   });
@@ -1463,7 +1463,7 @@ async function refreshWatchlist() {
         if (px?.close) priceData = { price: px.close, currency: stock.currency };
       }
       if (!priceData && stock.ticker) {
-        const qt = await fmpGet('/v3/profile/' + stock.ticker).catch(() => []);
+        const qt = await fmpGet('/stable/quote?symbol=' + stock.ticker).catch(() => []);
         const p = Array.isArray(qt) ? qt[0] : null;
         if (p?.price) priceData = { price: p.price, currency: p.currency || stock.currency };
       }
@@ -1651,7 +1651,8 @@ async function fetchFiscalData(nameOrTicker) {
 
 async function fmpGet(path) {
   // Worker forwards GET requests to https://financialmodelingprep.com/api + path
-  // Use /v3/ paths (free tier) e.g. fmpGet('/v3/profile/AAPL')
+  // Use /stable/ paths (current free tier) e.g. fmpGet('/stable/profile?symbol=AAPL')
+  // Worker base URL must be https://financialmodelingprep.com/api (NOT /api/v3)
   let res;
   try {
     res = await fetch(WORKERS.fmp + path, { method: 'GET' });
@@ -1666,24 +1667,21 @@ async function fetchFMPData(nameOrTicker) {
   const cacheKey = nameOrTicker.toLowerCase();
   if (_fmpCache[cacheKey]) return _fmpCache[cacheKey];
 
-  // Step 1: resolve ticker — /v3/search works on free tier
+  // All endpoints use /stable/ (current free-tier FMP API, worker base = /api)
+  // Step 1: resolve ticker via /stable/search-name
   let ticker = nameOrTicker.toUpperCase().replace(/\s+/g, "");
-  const searchResults = await fmpGet("/v3/search?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
+  const searchResults = await fmpGet("/stable/search-name?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
   if (Array.isArray(searchResults) && searchResults.length) {
     const exact = searchResults.find(r => r.symbol?.toUpperCase() === ticker);
     ticker = (exact || searchResults[0]).symbol;
   }
 
-  // Step 2: free-tier v3 endpoints in parallel
-  // /v3/profile/AAPL         — full profile: sector, industry, description, price, mktCap
-  // /v3/income-statement/AAPL — revenue, netIncome (annual)
-  // /v3/cash-flow-statement/AAPL — freeCashFlow (annual)
-  // /v3/key-metrics/AAPL     — peRatio, roic, debtToEquity, evToEbitda (annual)
+  // Step 2: fetch all data in parallel
   const [profileArr, income, cashFlow, keyMetrics] = await Promise.all([
-    fmpGet("/v3/profile/" + ticker),
-    fmpGet("/v3/income-statement/" + ticker + "?period=annual&limit=5").catch(() => []),
-    fmpGet("/v3/cash-flow-statement/" + ticker + "?period=annual&limit=2").catch(() => []),
-    fmpGet("/v3/key-metrics/" + ticker + "?period=annual&limit=10").catch(() => []),
+    fmpGet("/stable/profile?symbol=" + ticker),
+    fmpGet("/stable/income-statement?symbol=" + ticker + "&period=annual&limit=5").catch(() => []),
+    fmpGet("/stable/cash-flow-statement?symbol=" + ticker + "&period=annual&limit=2").catch(() => []),
+    fmpGet("/stable/key-metrics?symbol=" + ticker + "&period=annual&limit=10").catch(() => []),
   ]);
 
   const p   = Array.isArray(profileArr) ? profileArr[0] : (profileArr || {});
@@ -1726,15 +1724,15 @@ async function fetchFMPData(nameOrTicker) {
 
   const result = {
     ticker,
-    name:        p.companyName        || nameOrTicker,
-    exchange:    p.exchangeShortName  || p.exchange || null,
-    currency:    p.currency           || null,
-    sector:      p.sector             || null,
-    industry:    p.industry           || null,
-    country:     p.country            || null,
-    employees:   p.fullTimeEmployees  ? Number(p.fullTimeEmployees).toLocaleString() : null,
-    description: p.description        || null,
-    livePrice:   p.price              || null,
+    name:        p.companyName       || nameOrTicker,
+    exchange:    p.exchangeShortName || p.exchange || null,
+    currency:    p.currency          || null,
+    sector:      p.sector            || null,
+    industry:    p.industry          || null,
+    country:     p.country           || null,
+    employees:   p.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
+    description: p.description       || null,
+    livePrice:   p.price             || null,
     financials: {
       marketCap:     fmt(p.mktCap),
       revenue:       fmt(rev),
@@ -1747,7 +1745,7 @@ async function fetchFMPData(nameOrTicker) {
       debtToEquity:  latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
       dividendYield: p.lastDiv && p.price ? ((p.lastDiv / p.price) * 100).toFixed(2) + "%" : null,
     },
-    analystTargets: (p.dcf) ? {
+    analystTargets: p.dcf ? {
       low: null, mean: p.dcf || null, high: null, numAnalysts: null,
       consensus: p.dcfDiff > 0 ? "Undervalued" : p.dcfDiff < 0 ? "Overvalued" : null,
     } : null,
