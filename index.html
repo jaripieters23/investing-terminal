@@ -1110,7 +1110,7 @@ async function testGroqConnection() {
 
 async function testFiscalConnection() {
   await runConnectionTest('fiscal-test-btn', 'fiscal-test-result', async () => {
-    const data = await fiscalPost({ query: 'Apple', type: 'search', limit: 1 });
+    const data = await fiscalGet('/v2/companies-list?search=Apple&limit=1');
     const list = Array.isArray(data) ? data : (data?.data || data?.results || []);
     if (!list.length) throw new Error('No data returned');
     return 'Connected';
@@ -1119,9 +1119,9 @@ async function testFiscalConnection() {
 
 async function testFmpConnection() {
   await runConnectionTest('fmp-test-btn', 'fmp-test-result', async () => {
-    const data = await fmpGet('/profile/AAPL');
+    const data = await fmpGet('/quote/AAPL');
     if (!Array.isArray(data) || !data[0]?.symbol) throw new Error('No data returned');
-    return 'Connected — ' + data[0].companyName;
+    return 'Connected — ' + data[0].name + ' $' + data[0].price;
   });
 }
 
@@ -1450,13 +1450,13 @@ async function refreshWatchlist() {
       let priceData = null;
       if (!_fiscalRateLimited && stock.ticker) {
         const companyKey = (stock.exchange || 'NASDAQ') + '_' + stock.ticker;
-        const raw = await fiscalPost({ query: stock.ticker, type: 'price', companyKey, limit: 1 }).catch(() => null);
+        const raw = await fiscalGet('/v1/company/' + stock.ticker + '/price').catch(() => null);
         const latest = Array.isArray(raw?.data) ? raw.data[0] : (Array.isArray(raw) ? raw[0] : null);
         if (latest?.close) priceData = { price: latest.close, currency: stock.currency };
       }
       if (!priceData && stock.ticker) {
-        const profile = await fmpGet('/profile/' + stock.ticker).catch(() => []);
-        const p = Array.isArray(profile) ? profile[0] : null;
+        const qt = await fmpGet('/quote/' + stock.ticker).catch(() => []);
+        const p = Array.isArray(qt) ? qt[0] : null;
         if (p?.price) priceData = { price: p.price, currency: p.currency || stock.currency };
       }
       if (!priceData && stock.ticker) {
@@ -1482,14 +1482,14 @@ async function refreshWatchlist() {
 // ═══════════════════════════════════════════════════════════════
 // REAL DATA APIs (Fiscal.ai primary, FMP fallback)
 // ═══════════════════════════════════════════════════════════════
-async function fiscalPost(queryBody) {
-  // Sends queryBody directly to the worker, which forwards it to api.fiscal.ai/v1/query
+async function fiscalGet(path) {
+  // Worker accepts POST { path } and forwards as GET to https://api.fiscal.ai + path
   let res;
   try {
     res = await fetch(WORKERS.fiscal, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(queryBody)
+      body: JSON.stringify({ path })
     });
   } catch (networkErr) {
     throw new Error('Network error reaching Fiscal.ai worker. (' + networkErr.message + ')');
@@ -1500,18 +1500,18 @@ async function fiscalPost(queryBody) {
     updateFiscalStatus();
     throw Object.assign(new Error('fiscal_rate_limited'), { rateLimited: true });
   }
-  if (!res.ok) throw new Error('Fiscal.ai worker ' + res.status);
+  if (!res.ok) throw new Error('Fiscal.ai worker ' + res.status + ': ' + path);
   return res.json();
 }
 
-async function fiscalResolveCompanyKey(nameOrTicker) {
-  // Search by name/ticker and return the best companyKey
-  const results = await fiscalPost({ query: nameOrTicker, type: 'search', limit: 3 });
-  const list = Array.isArray(results) ? results : (results?.data || results?.results || []);
-  if (list[0]?.companyKey) return list[0].companyKey;
-  if (list[0]?.ticker && list[0]?.exchange) return list[0].exchange + '_' + list[0].ticker;
-  if (list[0]?.ticker) return list[0].ticker;
-  throw new Error('Fiscal.ai: no results for "' + nameOrTicker + '"');
+async function fiscalSearch(nameOrTicker) {
+  // Fiscal.ai v2 companies-list with search filter
+  const data = await fiscalGet('/v2/companies-list?search=' + encodeURIComponent(nameOrTicker) + '&limit=5');
+  const list = Array.isArray(data) ? data : (data?.data || data?.results || []);
+  if (!list.length) throw new Error('Fiscal.ai: no results for "' + nameOrTicker + '"');
+  // Prefer exact ticker match
+  const upper = nameOrTicker.toUpperCase();
+  return list.find(r => r.ticker?.toUpperCase() === upper) || list[0];
 }
 
 async function fetchFiscalData(nameOrTicker) {
@@ -1520,18 +1520,28 @@ async function fetchFiscalData(nameOrTicker) {
   if (_fiscalRateLimited && Date.now() > _fiscalRateLimitResetAt) { _fiscalRateLimited = false; updateFiscalStatus(); }
   if (_fiscalRateLimited) throw Object.assign(new Error('fiscal_rate_limited'), { rateLimited: true });
 
-  const companyKey = await fiscalResolveCompanyKey(nameOrTicker);
-  const [profile, ratiosRaw, priceRaw] = await Promise.all([
-    fiscalPost({ query: nameOrTicker, type: 'profile',  companyKey }),
-    fiscalPost({ query: nameOrTicker, type: 'financials', companyKey, period: 'annual', limit: 11 }).catch(() => null),
-    fiscalPost({ query: nameOrTicker, type: 'price',    companyKey, limit: 1 }).catch(() => null),
+  // Step 1: resolve company
+  const company = await fiscalSearch(nameOrTicker);
+  const ticker  = company.ticker || nameOrTicker.toUpperCase();
+  const companyId = company.id || company.companyId || ticker;
+
+  // Step 2: fetch all data in parallel using Fiscal.ai REST endpoints
+  const [profile, income, ratios, price] = await Promise.all([
+    fiscalGet('/v1/company/' + companyId + '/profile').catch(() => null),
+    fiscalGet('/v1/company/financials/income-statement/as-reported?ticker=' + ticker + '&period=annual&limit=10').catch(() => null),
+    fiscalGet('/v1/company/financials/ratios?ticker=' + ticker + '&period=annual&limit=10').catch(() => null),
+    fiscalGet('/v1/company/' + companyId + '/price').catch(() => null),
   ]);
 
-  const p = profile || {};
-  const ratiosList = Array.isArray(ratiosRaw?.data) ? ratiosRaw.data : Array.isArray(ratiosRaw) ? ratiosRaw : [];
-  const latestPrice = Array.isArray(priceRaw?.data) ? priceRaw.data[0] : Array.isArray(priceRaw) ? priceRaw[0] : null;
-  const latestRat = ratiosList[0] || {};
-  const prevRat   = ratiosList[1] || {};
+  const p    = (Array.isArray(profile) ? profile[0] : profile) || {};
+  const incs = Array.isArray(income)  ? income  : (income?.data  || []);
+  const rats = Array.isArray(ratios)  ? ratios  : (ratios?.data  || []);
+  const px   = Array.isArray(price)   ? price[0]: (price || {});
+
+  const latestInc = incs[0] || {};
+  const prevInc   = incs[1] || {};
+  const latestRat = rats[0] || {};
+  const prevRat   = rats[1] || {};
 
   function fmt(n) {
     if (n == null) return null;
@@ -1542,36 +1552,56 @@ async function fetchFiscalData(nameOrTicker) {
     return n.toLocaleString();
   }
 
-  const revGrowth = latestRat.revenueGrowth != null ? (latestRat.revenueGrowth * 100).toFixed(1) + '%'
-    : (latestRat.revenue && prevRat.revenue && prevRat.revenue !== 0) ? (((latestRat.revenue - prevRat.revenue) / Math.abs(prevRat.revenue)) * 100).toFixed(1) + '%' : null;
-  const fcfMargin = latestRat.freeCashFlowMargin != null ? (latestRat.freeCashFlowMargin * 100).toFixed(1) + '%'
-    : (latestRat.freeCashFlow && latestRat.revenue && latestRat.revenue !== 0) ? (latestRat.freeCashFlow / latestRat.revenue * 100).toFixed(1) + '%' : null;
-  const peAnnual = ratiosList.slice(0,10).filter(r => (r.peRatio||r.priceToEarnings) > 0 && (r.peRatio||r.priceToEarnings) < 300)
-    .map(r => ({ year: parseInt(r.fiscalYear || r.year || r.periodEndDate?.slice(0,4)), pe: +((r.peRatio||r.priceToEarnings)).toFixed(1) })).filter(r => r.year).reverse();
+  const rev     = latestInc.revenue || latestInc.totalRevenue;
+  const prevRev = prevInc.revenue   || prevInc.totalRevenue;
+  const revGrowth = rev && prevRev && prevRev !== 0
+    ? (((rev - prevRev) / Math.abs(prevRev)) * 100).toFixed(1) + '%' : null;
+  const fcf = latestInc.freeCashFlow || latestInc.operatingCashFlow;
+  const fcfMargin = fcf && rev && rev !== 0 ? (fcf / rev * 100).toFixed(1) + '%' : null;
+
+  const peRatioVal = latestRat.peRatio || latestRat.priceEarningsRatio || p.peRatio;
+  const peAnnual   = rats.slice(0,10)
+    .filter(r => { const pe = r.peRatio || r.priceEarningsRatio; return pe > 0 && pe < 300; })
+    .map(r => {
+      const pe = r.peRatio || r.priceEarningsRatio;
+      const yr = parseInt(r.fiscalYear || r.calendarYear || r.date?.slice(0,4));
+      return { year: yr, pe: +pe.toFixed(1) };
+    }).filter(r => r.year).reverse();
   const historicPEs = peAnnual.map(r => r.pe);
-  const tenYearAvg  = historicPEs.length ? +(historicPEs.reduce((a,b) => a+b, 0) / historicPEs.length).toFixed(1) : null;
-  const forwardPE   = (p.peRatio || p.priceToEarnings || latestRat.peRatio || latestRat.priceToEarnings) ? +((p.peRatio || p.priceToEarnings || latestRat.peRatio || latestRat.priceToEarnings)).toFixed(1) : null;
-  const ticker = p.ticker || companyKey.split('_').slice(1).join('_');
+  const tenYearAvg  = historicPEs.length ? +(historicPEs.reduce((a,b) => a+b,0)/historicPEs.length).toFixed(1) : null;
+  const forwardPE   = peRatioVal ? +peRatioVal.toFixed(1) : null;
+  const livePrice   = px.price || px.lastPrice || p.price || p.lastPrice || null;
 
   const result = {
-    ticker, name: p.name || p.companyName || nameOrTicker,
-    exchange: p.exchange || companyKey.split('_')[0] || null,
-    currency: p.currency || null, sector: p.sector || null, industry: p.industry || null,
-    country: p.country || null, employees: p.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
+    ticker,
+    name:        p.companyName || p.name || company.name || nameOrTicker,
+    exchange:    p.exchange    || company.exchange || null,
+    currency:    p.currency   || company.currency || null,
+    sector:      p.sector     || company.sector   || null,
+    industry:    p.industry   || company.industry || null,
+    country:     p.country    || company.country  || null,
+    employees:   p.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
     description: p.description || null,
-    livePrice: p.price || p.lastPrice || latestPrice?.close || latestPrice?.adjustedClose || null,
+    livePrice,
     financials: {
-      marketCap:    fmt(p.marketCap || p.mktCap),
-      revenue:      fmt(latestRat.revenue || p.revenue),
-      revenueGrowth:revGrowth,
-      netIncome:    fmt(latestRat.netIncome || p.netIncome),
-      fcfMargin, roic: latestRat.roic != null ? (latestRat.roic * 100).toFixed(1) + '%' : null,
-      peRatio:      (latestRat.peRatio || latestRat.priceToEarnings) != null ? (latestRat.peRatio || latestRat.priceToEarnings).toFixed(1) : null,
-      evEbitda:     latestRat.evToEbitda != null ? latestRat.evToEbitda.toFixed(1) : null,
-      debtToEquity: latestRat.debtToEquity != null ? latestRat.debtToEquity.toFixed(2) : null,
-      dividendYield:latestRat.dividendYield ? (latestRat.dividendYield * 100).toFixed(2) + '%' : null,
+      marketCap:     fmt(p.marketCap || p.mktCap),
+      revenue:       fmt(rev),
+      revenueGrowth: revGrowth,
+      netIncome:     fmt(latestInc.netIncome),
+      fcfMargin,
+      roic:          latestRat.returnOnCapitalEmployed != null ? (latestRat.returnOnCapitalEmployed*100).toFixed(1)+'%' : null,
+      peRatio:       peRatioVal ? peRatioVal.toFixed(1) : null,
+      evEbitda:      latestRat.enterpriseValueEbitda ? latestRat.enterpriseValueEbitda.toFixed(1) : null,
+      debtToEquity:  latestRat.debtToEquity ? latestRat.debtToEquity.toFixed(2) : null,
+      dividendYield: latestRat.dividendYield ? (latestRat.dividendYield*100).toFixed(2)+'%' : null,
     },
-    analystTargets: (p.priceTargetMean || p.analystTargetPrice) ? { low: p.priceTargetLow||null, mean: p.priceTargetMean||p.analystTargetPrice||null, high: p.priceTargetHigh||null, numAnalysts: p.numberOfAnalystOpinions||null, consensus: p.recommendationKey||null } : null,
+    analystTargets: (p.priceTarget || p.analystTargetPrice) ? {
+      low:  p.priceTargetLow  || null,
+      mean: p.priceTarget     || p.analystTargetPrice || null,
+      high: p.priceTargetHigh || null,
+      numAnalysts: p.numberOfAnalysts || null,
+      consensus:   p.analystRating   || null,
+    } : null,
     peHistory: (peAnnual.length && forwardPE) ? { forwardPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
     _source: 'fiscal',
   };
@@ -1583,7 +1613,7 @@ async function fetchFiscalData(nameOrTicker) {
 async function fmpGet(path) {
   // Worker accepts GET: fetch(WORKERS.fmp + path)
   // Worker base URL is https://financialmodelingprep.com/api/v3 so paths must NOT include /v3
-  // e.g. fmpGet('/profile/AAPL') → worker fetches /api/v3/profile/AAPL
+  // e.g. fmpGet('/quote/AAPL') → worker fetches /api/v3/profile/AAPL
   let res;
   try {
     res = await fetch(WORKERS.fmp + path, { method: 'GET' });
@@ -1597,61 +1627,63 @@ async function fmpGet(path) {
 async function fetchFMPData(nameOrTicker) {
   const cacheKey = nameOrTicker.toLowerCase();
   if (_fmpCache[cacheKey]) return _fmpCache[cacheKey];
-  let profileArr = await fmpGet('/profile/' + encodeURIComponent(nameOrTicker.toUpperCase())).catch(() => []);
-  let ticker = Array.isArray(profileArr) && profileArr[0]?.symbol ? profileArr[0].symbol : null;
-  if (!ticker) {
-    const results = await fmpGet('/search?query=' + encodeURIComponent(nameOrTicker) + '&limit=3').catch(() => []);
-    if (!results?.length) throw new Error('No FMP results for "' + nameOrTicker + '"');
-    ticker = results[0].symbol;
-    profileArr = await fmpGet('/profile/' + ticker).catch(() => []);
+  let ticker = nameOrTicker.toUpperCase().replace(/\s+/g, "");
+  const searchResults = await fmpGet("/search?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
+  if (Array.isArray(searchResults) && searchResults.length) {
+    const exact = searchResults.find(r => r.symbol?.toUpperCase() === ticker);
+    ticker = (exact || searchResults[0]).symbol;
   }
-  const [ratios, targets] = await Promise.all([
-    fmpGet('/ratios/' + ticker + '?limit=11'),
-    fmpGet('/analyst-price-targets?symbol=' + ticker + '&limit=5').catch(() => [])
+  const [quote, income, keyMetrics, cashFlow] = await Promise.all([
+    fmpGet("/quote/" + ticker),
+    fmpGet("/income-statement/" + ticker + "?limit=5").catch(() => []),
+    fmpGet("/key-metrics/" + ticker + "?limit=5").catch(() => []),
+    fmpGet("/cash-flow-statement/" + ticker + "?limit=2").catch(() => []),
   ]);
-  const p   = Array.isArray(profileArr) ? profileArr[0] : (profileArr || {});
-  const rat = Array.isArray(ratios) ? ratios : [];
-  // /analyst-price-targets returns array of { targetHigh, targetLow, targetMean, targetConsensus, analystCount }
-  const tgt = Array.isArray(targets) && targets.length ? targets[0] : null;
-  const latestRat = rat[0] || {};
-  const prevRat   = rat[1] || {};
-
+  const q = Array.isArray(quote) ? quote[0] : (quote || {});
+  const inc = Array.isArray(income) ? income : [];
+  const km = Array.isArray(keyMetrics) ? keyMetrics : [];
+  const cf = Array.isArray(cashFlow) ? cashFlow : [];
+  const latestInc = inc[0] || {}; const prevInc = inc[1] || {};
+  const latestKm = km[0] || {}; const latestCf = cf[0] || {};
   function fmt(n) {
     if (n == null) return null;
     const abs = Math.abs(n);
-    if (abs >= 1e12) return (n/1e12).toFixed(2) + 'T';
-    if (abs >= 1e9)  return (n/1e9).toFixed(1) + 'B';
-    if (abs >= 1e6)  return (n/1e6).toFixed(1) + 'M';
+    if (abs >= 1e12) return (n/1e12).toFixed(2) + "T";
+    if (abs >= 1e9) return (n/1e9).toFixed(1) + "B";
+    if (abs >= 1e6) return (n/1e6).toFixed(1) + "M";
     return n.toLocaleString();
   }
-
-  const revGrowth = latestRat.revenuePerShareTTM && prevRat.revenuePerShareTTM
-    ? (((latestRat.revenuePerShareTTM - prevRat.revenuePerShareTTM) / Math.abs(prevRat.revenuePerShareTTM)) * 100).toFixed(1) + '%' : null;
-  const fcfMargin = latestRat.freeCashFlowOperatingCashFlowRatio != null
-    ? (latestRat.freeCashFlowOperatingCashFlowRatio * 100).toFixed(1) + '%' : null;
-  const peAnnual = rat.slice(0,10).filter(r => r.priceEarningsRatio > 0 && r.priceEarningsRatio < 300)
-    .map(r => ({ year: parseInt(r.calendarYear || r.date?.slice(0,4)), pe: +r.priceEarningsRatio.toFixed(1) })).filter(r => r.year).reverse();
+  const rev = latestInc.revenue; const prevRev = prevInc.revenue;
+  const revGrowth = rev && prevRev && prevRev !== 0
+    ? (((rev - prevRev) / Math.abs(prevRev)) * 100).toFixed(1) + "%" : null;
+  const fcf = latestCf.freeCashFlow;
+  const fcfMargin = fcf && rev && rev !== 0 ? (fcf / rev * 100).toFixed(1) + "%" : null;
+  const roic = latestKm.roic != null ? (latestKm.roic * 100).toFixed(1) + "%" : null;
+  const currentPE = q.pe ? +q.pe.toFixed(1) : null;
+  const peAnnual = km.filter(r => r.peRatio > 0 && r.peRatio < 300)
+    .map(r => ({ year: parseInt(r.date?.slice(0,4)), pe: +r.peRatio.toFixed(1) })).filter(r => r.year).reverse();
   const historicPEs = peAnnual.map(r => r.pe);
-  const tenYearAvg  = historicPEs.length ? +(historicPEs.reduce((a,b) => a+b,0) / historicPEs.length).toFixed(1) : null;
-  const forwardPE   = p?.peRatioTTM ? +p.peRatioTTM.toFixed(1) : latestRat.priceEarningsRatio ? +latestRat.priceEarningsRatio.toFixed(1) : null;
-
+  const tenYearAvg = historicPEs.length ? +(historicPEs.reduce((a,b) => a+b,0) / historicPEs.length).toFixed(1) : null;
   const result = {
-    ticker, name: p?.companyName || nameOrTicker,
-    exchange: p?.exchangeShortName || null, currency: p?.currency || null,
-    sector: p?.sector || null, industry: p?.industry || null, country: p?.country || null,
-    employees: p?.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
-    description: p?.description || null, livePrice: p?.price || null,
+    ticker, name: q.name || nameOrTicker,
+    exchange: q.exchange || null, currency: q.currency || null,
+    sector: null, industry: null, country: null, employees: null, description: null,
+    livePrice: q.price || null,
     financials: {
-      marketCap: fmt(p?.mktCap), revenue: fmt(p?.revenue), revenueGrowth: revGrowth,
-      netIncome: fmt(p?.netIncome), fcfMargin, roic: latestRat.returnOnCapitalEmployed != null ? (latestRat.returnOnCapitalEmployed*100).toFixed(1)+'%' : null,
-      peRatio: latestRat.priceEarningsRatio != null ? latestRat.priceEarningsRatio.toFixed(1) : null,
-      evEbitda: latestRat.enterpriseValueMultiple != null ? latestRat.enterpriseValueMultiple.toFixed(1) : null,
-      debtToEquity: latestRat.debtEquityRatio != null ? latestRat.debtEquityRatio.toFixed(2) : null,
-      dividendYield: latestRat.dividendYield ? (latestRat.dividendYield*100).toFixed(2)+'%' : null,
+      marketCap: fmt(q.marketCap), revenue: fmt(rev), revenueGrowth: revGrowth,
+      netIncome: fmt(latestInc.netIncome), fcfMargin, roic,
+      peRatio: currentPE ? currentPE.toString() : null,
+      evEbitda: latestKm.evToOperatingCashFlow ? latestKm.evToOperatingCashFlow.toFixed(1) : null,
+      debtToEquity: latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
+      dividendYield: q.dividendYield ? (q.dividendYield * 100).toFixed(2) + "%" : null,
     },
-    analystTargets: tgt ? { low: tgt.targetLow||tgt.allTimeLow||null, mean: tgt.targetMean||tgt.allTimeAvg||null, high: tgt.targetHigh||tgt.allTimeHigh||null, numAnalysts: tgt.analystCount||tgt.totalAnalysts||null, consensus: tgt.targetConsensus||tgt.consensus||null } : null,
-    peHistory: (peAnnual.length && forwardPE) ? { forwardPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
-    _source: 'fmp',
+    analystTargets: (q.yearLow || q.yearHigh) ? {
+      low: q.yearLow||null, mean: q.priceAvg200||null, high: q.yearHigh||null,
+      numAnalysts: null, consensus: null
+    } : null,
+    peHistory: (peAnnual.length && currentPE)
+      ? { forwardPE: currentPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
+    _source: "fmp",
   };
   _fmpCache[cacheKey] = result;
   if (ticker) _fmpCache[ticker.toLowerCase()] = result;
