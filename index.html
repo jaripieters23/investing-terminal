@@ -1651,8 +1651,8 @@ async function fetchFiscalData(nameOrTicker) {
 
 async function fmpGet(path) {
   // Worker forwards GET requests to https://financialmodelingprep.com/api + path
-  // Use /stable/ paths (current free tier) e.g. fmpGet('/stable/profile?symbol=AAPL')
-  // Worker base URL must be https://financialmodelingprep.com/api (NOT /api/v3)
+  // Worker forwards to https://financialmodelingprep.com + path
+  // Worker base URL must be https://financialmodelingprep.com (no /api prefix)
   let res;
   try {
     res = await fetch(WORKERS.fmp + path, { method: 'GET' });
@@ -1668,9 +1668,9 @@ async function fetchFMPData(nameOrTicker) {
   if (_fmpCache[cacheKey]) return _fmpCache[cacheKey];
 
   // All endpoints use /stable/ (current free-tier FMP API, worker base = /api)
-  // Step 1: resolve ticker via /stable/search-name
+  // Step 1: resolve ticker via /stable/search-symbol
   let ticker = nameOrTicker.toUpperCase().replace(/\s+/g, "");
-  const searchResults = await fmpGet("/stable/search-name?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
+  const searchResults = await fmpGet("/stable/search-symbol?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
   if (Array.isArray(searchResults) && searchResults.length) {
     const exact = searchResults.find(r => r.symbol?.toUpperCase() === ticker);
     ticker = (exact || searchResults[0]).symbol;
