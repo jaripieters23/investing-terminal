@@ -1110,10 +1110,10 @@ async function testGroqConnection() {
 
 async function testFiscalConnection() {
   await runConnectionTest('fiscal-test-btn', 'fiscal-test-result', async () => {
-    const data = await fiscalGet('/v2/companies-list?search=Apple&limit=1');
-    const list = Array.isArray(data) ? data : (data?.data || data?.results || []);
-    if (!list.length) throw new Error('No data returned');
-    return 'Connected';
+    const data = await fiscalGet('/v2/company/profile?companyKey=NASDAQ_AAPL');
+    if (!data || (Array.isArray(data) && !data.length)) throw new Error('No data returned');
+    const name = Array.isArray(data) ? data[0]?.name : data?.name;
+    return 'Connected' + (name ? ' — ' + name : '');
   });
 }
 
@@ -1450,9 +1450,9 @@ async function refreshWatchlist() {
       let priceData = null;
       if (!_fiscalRateLimited && stock.ticker) {
         const companyKey = (stock.exchange || 'NASDAQ') + '_' + stock.ticker;
-        const raw = await fiscalGet('/v1/company/' + stock.ticker + '/price').catch(() => null);
-        const latest = Array.isArray(raw?.data) ? raw.data[0] : (Array.isArray(raw) ? raw[0] : null);
-        if (latest?.close) priceData = { price: latest.close, currency: stock.currency };
+        const raw = await fiscalGet('/v2/company/profile?companyKey=' + companyKey).catch(() => null);
+        const prof = Array.isArray(raw) ? raw[0] : raw;
+        if (prof?.price) priceData = { price: prof.price, currency: prof.currency || stock.currency };
       }
       if (!priceData && stock.ticker) {
         const qt = await fmpGet('/quote/' + stock.ticker).catch(() => []);
@@ -1504,60 +1504,67 @@ async function fiscalGet(path) {
   return res.json();
 }
 
-async function fiscalSearch(nameOrTicker) {
-  // Fiscal.ai v2 companies-list with search filter
-  const data = await fiscalGet('/v2/companies-list?search=' + encodeURIComponent(nameOrTicker) + '&limit=5');
+async function fiscalResolveCompanyKey(nameOrTicker) {
+  // /v2/companies-list returns all companies with their companyKey (format: EXCHANGE_TICKER)
+  // We filter client-side for the best match
+  const upper = nameOrTicker.toUpperCase().replace(/[^A-Z0-9.]/g, "");
+  const data = await fiscalGet("/v2/companies-list");
   const list = Array.isArray(data) ? data : (data?.data || data?.results || []);
-  if (!list.length) throw new Error('Fiscal.ai: no results for "' + nameOrTicker + '"');
-  // Prefer exact ticker match
-  const upper = nameOrTicker.toUpperCase();
-  return list.find(r => r.ticker?.toUpperCase() === upper) || list[0];
+  if (!list.length) throw new Error("Fiscal.ai: empty companies list");
+  // 1. Exact ticker match
+  let match = list.find(r => r.ticker?.toUpperCase() === upper);
+  // 2. companyKey ends with _TICKER
+  if (!match) match = list.find(r => r.companyKey?.toUpperCase().endsWith("_" + upper));
+  // 3. Name contains the search term
+  if (!match) {
+    const lower = nameOrTicker.toLowerCase();
+    match = list.find(r => r.name?.toLowerCase().includes(lower));
+  }
+  if (!match) throw new Error("Fiscal.ai: no match for \"" + nameOrTicker + "\"");
+  return match;
 }
 
 async function fetchFiscalData(nameOrTicker) {
   const cacheKey = nameOrTicker.toLowerCase();
   if (_fiscalCache[cacheKey]) return _fiscalCache[cacheKey];
   if (_fiscalRateLimited && Date.now() > _fiscalRateLimitResetAt) { _fiscalRateLimited = false; updateFiscalStatus(); }
-  if (_fiscalRateLimited) throw Object.assign(new Error('fiscal_rate_limited'), { rateLimited: true });
+  if (_fiscalRateLimited) throw Object.assign(new Error("fiscal_rate_limited"), { rateLimited: true });
 
-  // Step 1: resolve company
-  const company = await fiscalSearch(nameOrTicker);
-  const ticker  = company.ticker || nameOrTicker.toUpperCase();
-  const companyId = company.id || company.companyId || ticker;
+  // Step 1: resolve companyKey (e.g. NASDAQ_MSFT)
+  const company   = await fiscalResolveCompanyKey(nameOrTicker);
+  const companyKey = company.companyKey;
+  const ticker     = company.ticker || companyKey.split("_").slice(1).join("_");
 
-  // Step 2: fetch all data in parallel using Fiscal.ai REST endpoints
-  const [profile, income, ratios, price] = await Promise.all([
-    fiscalGet('/v1/company/' + companyId + '/profile').catch(() => null),
-    fiscalGet('/v1/company/financials/income-statement/as-reported?ticker=' + ticker + '&period=annual&limit=10').catch(() => null),
-    fiscalGet('/v1/company/financials/ratios?ticker=' + ticker + '&period=annual&limit=10').catch(() => null),
-    fiscalGet('/v1/company/' + companyId + '/price').catch(() => null),
+  // Step 2: fetch profile + financials in parallel
+  const [profile, income, ratios] = await Promise.all([
+    fiscalGet("/v2/company/profile?companyKey=" + companyKey),
+    fiscalGet("/v1/company/financials/income-statement/as-reported?companyKey=" + companyKey + "&period=annual&limit=10").catch(() => null),
+    fiscalGet("/v1/company/financials/ratios?companyKey=" + companyKey + "&period=annual&limit=10").catch(() => null),
   ]);
 
   const p    = (Array.isArray(profile) ? profile[0] : profile) || {};
   const incs = Array.isArray(income)  ? income  : (income?.data  || []);
   const rats = Array.isArray(ratios)  ? ratios  : (ratios?.data  || []);
-  const px   = Array.isArray(price)   ? price[0]: (price || {});
 
   const latestInc = incs[0] || {};
   const prevInc   = incs[1] || {};
   const latestRat = rats[0] || {};
-  const prevRat   = rats[1] || {};
 
   function fmt(n) {
     if (n == null) return null;
     const abs = Math.abs(n);
-    if (abs >= 1e12) return (n/1e12).toFixed(2) + 'T';
-    if (abs >= 1e9)  return (n/1e9).toFixed(1) + 'B';
-    if (abs >= 1e6)  return (n/1e6).toFixed(1) + 'M';
+    if (abs >= 1e12) return (n/1e12).toFixed(2) + "T";
+    if (abs >= 1e9)  return (n/1e9).toFixed(1) + "B";
+    if (abs >= 1e6)  return (n/1e6).toFixed(1) + "M";
     return n.toLocaleString();
   }
 
   const rev     = latestInc.revenue || latestInc.totalRevenue;
   const prevRev = prevInc.revenue   || prevInc.totalRevenue;
   const revGrowth = rev && prevRev && prevRev !== 0
-    ? (((rev - prevRev) / Math.abs(prevRev)) * 100).toFixed(1) + '%' : null;
+    ? (((rev - prevRev) / Math.abs(prevRev)) * 100).toFixed(1) + "%" : null;
   const fcf = latestInc.freeCashFlow || latestInc.operatingCashFlow;
-  const fcfMargin = fcf && rev && rev !== 0 ? (fcf / rev * 100).toFixed(1) + '%' : null;
+  const fcfMargin = fcf && rev && rev !== 0 ? (fcf / rev * 100).toFixed(1) + "%" : null;
 
   const peRatioVal = latestRat.peRatio || latestRat.priceEarningsRatio || p.peRatio;
   const peAnnual   = rats.slice(0,10)
@@ -1570,40 +1577,39 @@ async function fetchFiscalData(nameOrTicker) {
   const historicPEs = peAnnual.map(r => r.pe);
   const tenYearAvg  = historicPEs.length ? +(historicPEs.reduce((a,b) => a+b,0)/historicPEs.length).toFixed(1) : null;
   const forwardPE   = peRatioVal ? +peRatioVal.toFixed(1) : null;
-  const livePrice   = px.price || px.lastPrice || p.price || p.lastPrice || null;
 
   const result = {
     ticker,
     name:        p.companyName || p.name || company.name || nameOrTicker,
-    exchange:    p.exchange    || company.exchange || null,
+    exchange:    p.exchange    || company.exchange || companyKey.split("_")[0] || null,
     currency:    p.currency   || company.currency || null,
     sector:      p.sector     || company.sector   || null,
     industry:    p.industry   || company.industry || null,
     country:     p.country    || company.country  || null,
     employees:   p.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
     description: p.description || null,
-    livePrice,
+    livePrice:   p.price || p.lastPrice || p.currentPrice || null,
     financials: {
       marketCap:     fmt(p.marketCap || p.mktCap),
       revenue:       fmt(rev),
       revenueGrowth: revGrowth,
       netIncome:     fmt(latestInc.netIncome),
       fcfMargin,
-      roic:          latestRat.returnOnCapitalEmployed != null ? (latestRat.returnOnCapitalEmployed*100).toFixed(1)+'%' : null,
+      roic:          latestRat.returnOnCapitalEmployed != null ? (latestRat.returnOnCapitalEmployed*100).toFixed(1)+"%" : null,
       peRatio:       peRatioVal ? peRatioVal.toFixed(1) : null,
       evEbitda:      latestRat.enterpriseValueEbitda ? latestRat.enterpriseValueEbitda.toFixed(1) : null,
       debtToEquity:  latestRat.debtToEquity ? latestRat.debtToEquity.toFixed(2) : null,
-      dividendYield: latestRat.dividendYield ? (latestRat.dividendYield*100).toFixed(2)+'%' : null,
+      dividendYield: latestRat.dividendYield ? (latestRat.dividendYield*100).toFixed(2)+"%" : null,
     },
     analystTargets: (p.priceTarget || p.analystTargetPrice) ? {
-      low:  p.priceTargetLow  || null,
-      mean: p.priceTarget     || p.analystTargetPrice || null,
-      high: p.priceTargetHigh || null,
+      low:         p.priceTargetLow  || null,
+      mean:        p.priceTarget     || p.analystTargetPrice || null,
+      high:        p.priceTargetHigh || null,
       numAnalysts: p.numberOfAnalysts || null,
       consensus:   p.analystRating   || null,
     } : null,
     peHistory: (peAnnual.length && forwardPE) ? { forwardPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
-    _source: 'fiscal',
+    _source: "fiscal",
   };
   _fiscalCache[cacheKey] = result;
   if (ticker) _fiscalCache[ticker.toLowerCase()] = result;
