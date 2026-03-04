@@ -1111,7 +1111,7 @@ async function testGroqConnection() {
 async function testFiscalConnection() {
   await runConnectionTest('fiscal-test-btn', 'fiscal-test-result', async () => {
     // Step 1: test companies-list
-    const listResp = await fiscalGet('/v2/companies-list?pageSize=5&page=1');
+    const listResp = await fiscalGet('/v2/companies-list');
     const list = listResp?.data || (Array.isArray(listResp) ? listResp : []);
     if (!list.length) throw new Error('companies-list returned no data');
     // Step 2: test profile using real companyKey + figi from the list
@@ -1127,7 +1127,7 @@ async function testFiscalConnection() {
 
 async function testFmpConnection() {
   await runConnectionTest('fmp-test-btn', 'fmp-test-result', async () => {
-    const data = await fmpGet('/stable/profile?symbol=AAPL');
+    const data = await fmpGet('/v3/profile/AAPL');
     if (!Array.isArray(data) || !data[0]?.symbol) throw new Error('No data returned');
     return 'Connected — ' + data[0].companyName + ' $' + data[0].price;
   });
@@ -1463,7 +1463,7 @@ async function refreshWatchlist() {
         if (px?.close) priceData = { price: px.close, currency: stock.currency };
       }
       if (!priceData && stock.ticker) {
-        const qt = await fmpGet('/stable/quote?symbol=' + stock.ticker).catch(() => []);
+        const qt = await fmpGet('/v3/profile/' + stock.ticker).catch(() => []);
         const p = Array.isArray(qt) ? qt[0] : null;
         if (p?.price) priceData = { price: p.price, currency: p.currency || stock.currency };
       }
@@ -1519,7 +1519,7 @@ async function fiscalResolveCompany(nameOrTicker) {
   const lower = nameOrTicker.toLowerCase();
 
   // Fetch page 1 (up to 1000 entries) — no server-side filtering documented
-  const resp = await fiscalGet("/v2/companies-list?pageSize=1000&page=1");
+  const resp = await fiscalGet("/v2/companies-list");
   const list = resp?.data || (Array.isArray(resp) ? resp : []);
   if (!list.length) throw new Error("Fiscal.ai: empty companies list");
 
@@ -1651,7 +1651,7 @@ async function fetchFiscalData(nameOrTicker) {
 
 async function fmpGet(path) {
   // Worker forwards GET requests to https://financialmodelingprep.com/api + path
-  // Use /stable/ paths (current FMP API) e.g. fmpGet('/stable/profile?symbol=AAPL')
+  // Use /v3/ paths (free tier) e.g. fmpGet('/v3/profile/AAPL')
   let res;
   try {
     res = await fetch(WORKERS.fmp + path, { method: 'GET' });
@@ -1666,39 +1666,35 @@ async function fetchFMPData(nameOrTicker) {
   const cacheKey = nameOrTicker.toLowerCase();
   if (_fmpCache[cacheKey]) return _fmpCache[cacheKey];
 
-  // Step 1: resolve ticker using /stable/search-name (handles company names + tickers)
+  // Step 1: resolve ticker — /v3/search works on free tier
   let ticker = nameOrTicker.toUpperCase().replace(/\s+/g, "");
-  const searchResults = await fmpGet("/stable/search-name?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
+  const searchResults = await fmpGet("/v3/search?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
   if (Array.isArray(searchResults) && searchResults.length) {
     const exact = searchResults.find(r => r.symbol?.toUpperCase() === ticker);
     ticker = (exact || searchResults[0]).symbol;
   }
 
-  // Step 2: fetch all data in parallel using /stable/ endpoints
-  // /stable/profile: full company profile with sector, industry, description, price, mktCap
-  // /stable/income-statement: revenue, netIncome (annual, limit 5)
-  // /stable/cash-flow-statement: freeCashFlow (annual, limit 2)
-  // /stable/key-metrics: peRatio, roic, debtToEquity, evToEbitda (annual, limit 10)
-  // /stable/analyst-estimates: price targets and consensus
-  const [profileArr, income, cashFlow, keyMetrics, analystEst] = await Promise.all([
-    fmpGet("/stable/profile?symbol=" + ticker),
-    fmpGet("/stable/income-statement?symbol=" + ticker + "&period=annual&limit=5").catch(() => []),
-    fmpGet("/stable/cash-flow-statement?symbol=" + ticker + "&period=annual&limit=2").catch(() => []),
-    fmpGet("/stable/key-metrics?symbol=" + ticker + "&period=annual&limit=10").catch(() => []),
-    fmpGet("/stable/analyst-estimates?symbol=" + ticker + "&limit=1").catch(() => []),
+  // Step 2: free-tier v3 endpoints in parallel
+  // /v3/profile/AAPL         — full profile: sector, industry, description, price, mktCap
+  // /v3/income-statement/AAPL — revenue, netIncome (annual)
+  // /v3/cash-flow-statement/AAPL — freeCashFlow (annual)
+  // /v3/key-metrics/AAPL     — peRatio, roic, debtToEquity, evToEbitda (annual)
+  const [profileArr, income, cashFlow, keyMetrics] = await Promise.all([
+    fmpGet("/v3/profile/" + ticker),
+    fmpGet("/v3/income-statement/" + ticker + "?period=annual&limit=5").catch(() => []),
+    fmpGet("/v3/cash-flow-statement/" + ticker + "?period=annual&limit=2").catch(() => []),
+    fmpGet("/v3/key-metrics/" + ticker + "?period=annual&limit=10").catch(() => []),
   ]);
 
   const p   = Array.isArray(profileArr) ? profileArr[0] : (profileArr || {});
-  const inc = Array.isArray(income)     ? income    : [];
-  const cf  = Array.isArray(cashFlow)   ? cashFlow  : [];
-  const km  = Array.isArray(keyMetrics) ? keyMetrics: [];
-  const ae  = Array.isArray(analystEst) ? analystEst: [];
+  const inc = Array.isArray(income)     ? income     : [];
+  const cf  = Array.isArray(cashFlow)   ? cashFlow   : [];
+  const km  = Array.isArray(keyMetrics) ? keyMetrics : [];
 
   const latestInc = inc[0] || {};
   const prevInc   = inc[1] || {};
   const latestCf  = cf[0]  || {};
   const latestKm  = km[0]  || {};
-  const latestAe  = ae[0]  || {};
 
   function fmt(n) {
     if (n == null) return null;
@@ -1718,10 +1714,8 @@ async function fetchFMPData(nameOrTicker) {
     || (latestCf.operatingCashFlow != null && latestCf.capitalExpenditure != null
         ? latestCf.operatingCashFlow - Math.abs(latestCf.capitalExpenditure) : null);
   const fcfMargin = fcf != null && rev ? (fcf / rev * 100).toFixed(1) + "%" : null;
+  const roic      = latestKm.roic != null ? (latestKm.roic * 100).toFixed(1) + "%" : null;
 
-  const roic = latestKm.roic != null ? (latestKm.roic * 100).toFixed(1) + "%" : null;
-
-  // P/E from key-metrics history for PE chart; current PE from profile
   const currentPE = p.pe ? +p.pe.toFixed(1) : (latestKm.peRatio ? +latestKm.peRatio.toFixed(1) : null);
   const peAnnual  = km.filter(r => r.peRatio > 0 && r.peRatio < 300)
     .map(r => ({ year: parseInt(r.date?.slice(0, 4)), pe: +r.peRatio.toFixed(1) }))
@@ -1730,27 +1724,17 @@ async function fetchFMPData(nameOrTicker) {
   const tenYearAvg  = historicPEs.length
     ? +(historicPEs.reduce((a, b) => a + b, 0) / historicPEs.length).toFixed(1) : null;
 
-  // Analyst estimates from /stable/analyst-estimates
-  const hasTargets = latestAe.estimatedRevenueLow || latestAe.estimatedEpsAvg;
-  const analystTargets = (p.dcfDiff || latestAe.estimatedRevenueLow) ? {
-    low:         latestAe.estimatedEpsLow       || null,
-    mean:        p.dcf                          || null,
-    high:        latestAe.estimatedEpsHigh      || null,
-    numAnalysts: latestAe.numberAnalystEstimated|| null,
-    consensus:   p.dcfDiff > 0 ? "Buy" : p.dcfDiff < 0 ? "Sell" : null,
-  } : null;
-
   const result = {
     ticker,
-    name:        p.companyName  || nameOrTicker,
-    exchange:    p.exchangeShortName || p.exchange || null,
-    currency:    p.currency     || null,
-    sector:      p.sector       || null,
-    industry:    p.industry     || null,
-    country:     p.country      || null,
-    employees:   p.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
-    description: p.description  || null,
-    livePrice:   p.price        || null,
+    name:        p.companyName        || nameOrTicker,
+    exchange:    p.exchangeShortName  || p.exchange || null,
+    currency:    p.currency           || null,
+    sector:      p.sector             || null,
+    industry:    p.industry           || null,
+    country:     p.country            || null,
+    employees:   p.fullTimeEmployees  ? Number(p.fullTimeEmployees).toLocaleString() : null,
+    description: p.description        || null,
+    livePrice:   p.price              || null,
     financials: {
       marketCap:     fmt(p.mktCap),
       revenue:       fmt(rev),
@@ -1761,10 +1745,12 @@ async function fetchFMPData(nameOrTicker) {
       peRatio:       currentPE ? currentPE.toString() : null,
       evEbitda:      latestKm.evToEbitda ? latestKm.evToEbitda.toFixed(1) : null,
       debtToEquity:  latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
-      dividendYield: p.lastDiv && p.price
-        ? ((p.lastDiv / p.price) * 100).toFixed(2) + "%" : null,
+      dividendYield: p.lastDiv && p.price ? ((p.lastDiv / p.price) * 100).toFixed(2) + "%" : null,
     },
-    analystTargets,
+    analystTargets: (p.dcf) ? {
+      low: null, mean: p.dcf || null, high: null, numAnalysts: null,
+      consensus: p.dcfDiff > 0 ? "Undervalued" : p.dcfDiff < 0 ? "Overvalued" : null,
+    } : null,
     peHistory: (peAnnual.length && currentPE)
       ? { forwardPE: currentPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
     _source: "fmp",
