@@ -1463,9 +1463,18 @@ async function refreshWatchlist() {
         if (px?.close) priceData = { price: px.close, currency: stock.currency };
       }
       if (!priceData && stock.ticker) {
-        const qt = await fmpGet('/stable/quote?symbol=' + stock.ticker).catch(() => []);
-        const p = Array.isArray(qt) ? qt[0] : null;
-        if (p?.price) priceData = { price: p.price, currency: p.currency || stock.currency };
+        const [qt, pt] = await Promise.all([
+          fmpGet('/stable/quote?symbol=' + stock.ticker).catch(() => []),
+          fmpGet('/stable/price-target?symbol=' + stock.ticker).catch(() => []),
+        ]);
+        const q = Array.isArray(qt) ? qt[0] : null;
+        const t = Array.isArray(pt) ? pt[0] : null;
+        if (q?.price) priceData = { price: q.price, currency: q.currency || stock.currency };
+        if (t?.targetLow || t?.targetMean) {
+          stock.targetLow  = t.targetLow  || stock.targetLow;
+          stock.targetMean = t.targetMean || stock.targetMean;
+          stock.targetHigh = t.targetHigh || stock.targetHigh;
+        }
       }
       if (!priceData && stock.ticker) {
         priceData = await fetchCurrentPrice(stock.ticker);
@@ -1677,17 +1686,20 @@ async function fetchFMPData(nameOrTicker) {
   }
 
   // Step 2: fetch all data in parallel
-  const [profileArr, income, cashFlow, keyMetrics] = await Promise.all([
+  const [profileArr, income, cashFlow, keyMetrics, priceTarget] = await Promise.all([
     fmpGet("/stable/profile?symbol=" + ticker),
     fmpGet("/stable/income-statement?symbol=" + ticker + "&period=annual&limit=5").catch(() => []),
     fmpGet("/stable/cash-flow-statement?symbol=" + ticker + "&period=annual&limit=2").catch(() => []),
     fmpGet("/stable/key-metrics?symbol=" + ticker + "&period=annual&limit=10").catch(() => []),
+    fmpGet("/stable/price-target?symbol=" + ticker).catch(() => []),
   ]);
 
   const p   = Array.isArray(profileArr) ? profileArr[0] : (profileArr || {});
   const inc = Array.isArray(income)     ? income     : [];
   const cf  = Array.isArray(cashFlow)   ? cashFlow   : [];
   const km  = Array.isArray(keyMetrics) ? keyMetrics : [];
+  // /stable/price-target returns array of { targetHigh, targetLow, targetMean, targetConsensus, analystCount }
+  const pt  = Array.isArray(priceTarget) ? priceTarget[0] : null;
 
   const latestInc = inc[0] || {};
   const prevInc   = inc[1] || {};
@@ -1745,9 +1757,12 @@ async function fetchFMPData(nameOrTicker) {
       debtToEquity:  latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
       dividendYield: p.lastDiv && p.price ? ((p.lastDiv / p.price) * 100).toFixed(2) + "%" : null,
     },
-    analystTargets: p.dcf ? {
-      low: null, mean: p.dcf || null, high: null, numAnalysts: null,
-      consensus: p.dcfDiff > 0 ? "Undervalued" : p.dcfDiff < 0 ? "Overvalued" : null,
+    analystTargets: (pt?.targetLow || pt?.targetMean || pt?.targetHigh) ? {
+      low:         pt.targetLow         || null,
+      mean:        pt.targetMean        || null,
+      high:        pt.targetHigh        || null,
+      numAnalysts: pt.analystCount      || pt.numberOfAnalysts || null,
+      consensus:   pt.targetConsensus   || null,
     } : null,
     peHistory: (peAnnual.length && currentPE)
       ? { forwardPE: currentPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
