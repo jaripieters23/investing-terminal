@@ -349,7 +349,7 @@ html{scroll-padding-top:var(--header-h)}
   <div class="topbar-title" id="topbar-title">Dashboard</div>
   <div class="topbar-badge" id="perf-badge" style="display:none"></div>
   <div class="topbar-badge" id="port-badge" style="display:none"></div>
-  <div class="topbar-badge">&#128274; Local only</div>
+  <div class="topbar-badge" id="data-source-badge">&#128274; Local only</div>
   <button class="privacy-btn" id="privacy-btn" onclick="togglePrivacyMode()" title="Blur personal numbers">
     <span id="privacy-icon">&#128065;</span><span id="privacy-label"> Hide</span>
   </button>
@@ -1704,16 +1704,32 @@ async function fiscalResolveCompany(nameOrTicker) {
   const upper = nameOrTicker.toUpperCase().replace(/[^A-Z0-9.]/g, "");
   const lower = nameOrTicker.toLowerCase();
 
-  // Fetch page 1 (up to 1000 entries) — no server-side filtering documented
-  const resp = await fiscalGet("/v2/companies-list?pageNumber=1&pageSize=1000");
-  const list = resp?.data || (Array.isArray(resp) ? resp : []);
-  if (!list.length) throw new Error("Fiscal.ai: empty companies list");
+  // Paginate through companies-list until we find a match (max 5 pages of 200)
+  const PAGE_SIZE = 200;
+  const MAX_PAGES = 5;
 
-  // Priority: exact ticker match > name includes search term
-  const match = list.find(r => r.ticker?.toUpperCase() === upper)
-    || list.find(r => r.name?.toLowerCase().includes(lower));
-  if (!match) throw new Error("Fiscal.ai: no match for \"" + nameOrTicker + "\"");
-  return match;
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const resp = await fiscalGet("/v2/companies-list?pageNumber=" + page + "&pageSize=" + PAGE_SIZE).catch(e => { console.warn("[Fiscal] companies-list page", page, "failed:", e.message); return null; });
+    if (!resp) break;
+    const list = resp?.data || (Array.isArray(resp) ? resp : []);
+    if (!list.length) break; // no more results
+
+    // Priority: exact ticker > starts-with ticker > name includes
+    const match = list.find(r => r.ticker?.toUpperCase() === upper)
+      || list.find(r => r.ticker?.toUpperCase().startsWith(upper) && upper.length >= 2)
+      || list.find(r => r.name?.toLowerCase().includes(lower));
+
+    if (match) {
+      console.log('[Fiscal] Resolved "' + nameOrTicker + '" → ' + match.ticker + ' on page ' + page);
+      return match;
+    }
+
+    // If pagination says there are no more pages, stop early
+    const total = resp?.pagination?.totalCount || resp?.pagination?.total || null;
+    if (total != null && page * PAGE_SIZE >= total) break;
+  }
+
+  throw new Error('Fiscal.ai: no match for "' + nameOrTicker + '" in first ' + (MAX_PAGES * PAGE_SIZE) + ' companies');
 }
 
 async function fetchFiscalData(nameOrTicker) {
@@ -1734,13 +1750,15 @@ async function fetchFiscalData(nameOrTicker) {
   // - v1 financials: income-statement, cash-flow-statement, ratios — all use companyKey
   // - v2/stock-prices: latest EOD price
   const figiParam = figi ? "&figi=" + figi : "";
+  const catchLog = (path, p) => p.catch(e => { console.warn('[Fiscal] Failed:', path, e.message); return null; });
   const [profile, income, cashflow, ratios, priceResp] = await Promise.all([
-    fiscalGet("/v2/company/profile?companyKey=" + companyKey + figiParam),
-    fiscalGet("/v1/company/financials/income-statement?companyKey=" + companyKey + "&period=annual&limit=10").catch(() => null),
-    fiscalGet("/v1/company/financials/cash-flow-statement?companyKey=" + companyKey + "&period=annual&limit=5").catch(() => null),
-    fiscalGet("/v1/company/financials/ratios?companyKey=" + companyKey + "&period=annual&limit=10").catch(() => null),
-    fiscalGet("/v2/stock-prices?companyKey=" + companyKey + "&limit=1").catch(() => null),
+    catchLog('/v2/company/profile',        fiscalGet("/v2/company/profile?companyKey=" + companyKey + figiParam)),
+    catchLog('/v1/income-statement',       fiscalGet("/v1/company/financials/income-statement?companyKey=" + companyKey + "&period=annual&limit=10")),
+    catchLog('/v1/cash-flow-statement',    fiscalGet("/v1/company/financials/cash-flow-statement?companyKey=" + companyKey + "&period=annual&limit=5")),
+    catchLog('/v1/ratios',                 fiscalGet("/v1/company/financials/ratios?companyKey=" + companyKey + "&period=annual&limit=10")),
+    catchLog('/v2/stock-prices',           fiscalGet("/v2/stock-prices?companyKey=" + companyKey + "&limit=1")),
   ]);
+  console.log('[Fiscal] Endpoint results — profile:', !!profile, 'income:', !!income, 'cashflow:', !!cashflow, 'ratios:', !!ratios, 'price:', !!priceResp);
 
   // Normalise response shapes — all may be { data: [] } or bare arrays
   const p    = (Array.isArray(profile) ? profile[0] : (profile?.data?.[0] ?? profile)) || {};
@@ -2140,6 +2158,8 @@ async function fetchRealData(nameOrTicker) {
     try {
       const d = await fetchFiscalData(nameOrTicker);
       console.log('[fetchRealData] Fiscal.ai succeeded for', nameOrTicker);
+      const b = document.getElementById('data-source-badge');
+      if (b) { b.textContent = '● Fiscal.ai'; b.className = 'topbar-badge green'; }
       return { ...d, _dataSource: 'fiscal' };
     } catch (e) {
       console.warn('[fetchRealData] Fiscal.ai failed for', nameOrTicker, '—', e.message, '— falling back to FMP');
@@ -2149,6 +2169,8 @@ async function fetchRealData(nameOrTicker) {
   try {
     const d = await fetchFMPData(nameOrTicker);
     console.log('[fetchRealData] FMP succeeded for', nameOrTicker);
+    const b2 = document.getElementById('data-source-badge');
+    if (b2) { b2.textContent = '● FMP'; b2.className = 'topbar-badge green'; }
     return { ...d, _dataSource: _fiscalRateLimited ? 'fmp-fallback' : 'fmp' };
   } catch (e) {
     throw new Error('Both Fiscal.ai and FMP failed: ' + e.message);
