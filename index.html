@@ -1676,6 +1676,10 @@ async function fetchFMPData(nameOrTicker) {
   const inc = Array.isArray(income)     ? income     : (income ? [income]     : []);
   const cf  = Array.isArray(cashFlow)   ? cashFlow   : (cashFlow ? [cashFlow] : []);
   const km  = Array.isArray(keyMetrics) ? keyMetrics : (keyMetrics ? [keyMetrics] : []);
+  console.log('[FMP RAW] profile keys:', Object.keys(p).join(','));
+  console.log('[FMP RAW] profile sample:', JSON.stringify({pe:p.pe,mktCap:p.mktCap,price:p.price,lastDiv:p.lastDiv,priceEarningsRatio:p.priceEarningsRatio}));
+  console.log('[FMP RAW] km[0] keys:', Object.keys(km[0]||{}).join(','));
+  console.log('[FMP RAW] km[0] sample:', JSON.stringify({roic:km[0]?.roic,returnOnInvestedCapital:km[0]?.returnOnInvestedCapital,peRatio:km[0]?.peRatio,priceEarningsRatio:km[0]?.priceEarningsRatio,evToEbitda:km[0]?.evToEbitda,debtToEquity:km[0]?.debtToEquity,netDebt:km[0]?.netDebt,pegRatio:km[0]?.pegRatio}));
   // price-target-consensus returns flat object: { targetHigh, targetLow, targetMean, targetConsensus }
   const pt  = Array.isArray(priceTarget) ? priceTarget[0] : (priceTarget || null);
 
