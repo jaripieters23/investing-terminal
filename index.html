@@ -1587,10 +1587,10 @@ async function refreshWatchlist() {
       if (!priceData && stock.ticker) {
         const [qt, pt] = await Promise.all([
           fmpGet('/stable/quote?symbol=' + stock.ticker).catch(() => []),
-          fmpGet('/stable/price-target?symbol=' + stock.ticker).catch(() => []),
+          fmpGet('/stable/price-target-consensus?symbol=' + stock.ticker).catch(() => []),
         ]);
         const q = Array.isArray(qt) ? qt[0] : null;
-        const t = Array.isArray(pt) ? pt[0] : null;
+        const t = Array.isArray(pt) ? pt[0] : (pt || null);
         if (q?.price) priceData = { price: q.price, currency: q.currency || stock.currency };
         if (t?.targetLow || t?.targetMean) {
           stock.targetLow  = t.targetLow  || stock.targetLow;
@@ -1664,14 +1664,15 @@ async function fetchFMPData(nameOrTicker) {
     fmpGet("/stable/profile?symbol=" + ticker),
     fmpGet("/stable/income-statement?symbol=" + ticker + "&period=annual&limit=5").catch(() => []),
     fmpGet("/stable/cash-flow-statement?symbol=" + ticker + "&period=annual&limit=5").catch(() => []),
-    fmpGet("/stable/key-metrics?symbol=" + ticker + "&period=annual&limit=10").catch(() => []),
-    fmpGet("/stable/price-target?symbol=" + ticker).catch(() => []),
+    fmpGet("/stable/key-metrics?symbol=" + ticker + "&period=annual&limit=5").catch(() => []),
+    fmpGet("/stable/price-target-consensus?symbol=" + ticker).catch(() => []),
   ]);
 
   const p   = (Array.isArray(profileArr) ? profileArr[0] : profileArr) || {};
   const inc = Array.isArray(income)     ? income     : (income ? [income]     : []);
   const cf  = Array.isArray(cashFlow)   ? cashFlow   : (cashFlow ? [cashFlow] : []);
   const km  = Array.isArray(keyMetrics) ? keyMetrics : (keyMetrics ? [keyMetrics] : []);
+  // price-target-consensus returns flat object: { targetHigh, targetLow, targetMean, targetConsensus }
   const pt  = Array.isArray(priceTarget) ? priceTarget[0] : (priceTarget || null);
 
   const latestInc = inc[0] || {};
@@ -1809,11 +1810,10 @@ async function fetchFMPData(nameOrTicker) {
       };
     })(),
     analystTargets: (pt?.targetLow || pt?.targetMean || pt?.targetHigh) ? {
-      low:         pt.targetLow         || null,
-      mean:        pt.targetMean        || null,
-      high:        pt.targetHigh        || null,
-      numAnalysts: pt.analystCount      || pt.numberOfAnalysts || null,
-      consensus:   pt.targetConsensus   || null,
+      low:       pt.targetLow       || null,
+      mean:      pt.targetMean      || null,
+      high:      pt.targetHigh      || null,
+      consensus: pt.targetConsensus || null,
     } : null,
     peHistory: (peAnnual.length && currentPE)
       ? { forwardPE: currentPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
