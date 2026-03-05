@@ -422,7 +422,7 @@ html{scroll-padding-top:var(--header-h)}
 <div id="scan-page">
   <div class="scan-header"><div class="scan-title">Market Scan</div><div class="scan-subtitle">Score stocks against Pieter Slegers' Compounding Quality criteria. Powered by Groq AI + real financial data.</div></div>
   <div class="scan-controls">
-    <input class="scan-input" id="scan-input" type="text" placeholder="e.g. ASML, Microsoft, Novo Nordisk&#8230;" onkeydown="if(event.key==='Enter')addToQueue()">
+    <input class="scan-input" id="scan-input" type="text" placeholder="Enter ticker symbol, e.g. AAPL, MSFT, ASML&#8230;" onkeydown="if(event.key==='Enter')addToQueue()">
     <button class="scan-btn secondary" onclick="addToQueue()">+ Add</button>
     <button class="scan-btn" id="scan-run-btn" onclick="runScan()" disabled>Scan &#9654;</button>
   </div>
@@ -1185,7 +1185,7 @@ const INDEXES = {
 
 function addToQueue() {
   const inp = document.getElementById('scan-input');
-  const val = inp.value.trim();
+  const val = inp.value.trim().toUpperCase().replace(/\s+/g, '');
   if (!val || scanQueue.includes(val)) { inp.value = ''; return; }
   scanQueue.push(val);
   inp.value = '';
@@ -1653,10 +1653,14 @@ async function fetchFMPData(nameOrTicker) {
   // All endpoints use /stable/ (current free-tier FMP API, worker base = /api)
   // Step 1: resolve ticker via /stable/search-symbol
   let ticker = nameOrTicker.toUpperCase().replace(/\s+/g, "");
-  const searchResults = await fmpGet("/stable/search-symbol?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
-  if (Array.isArray(searchResults) && searchResults.length) {
-    const exact = searchResults.find(r => r.symbol?.toUpperCase() === ticker);
-    ticker = (exact || searchResults[0]).symbol;
+  // If input looks like a ticker (≤6 chars, all caps/dots), use directly; else search
+  const looksLikeTicker = /^[A-Z0-9.]{1,6}$/.test(ticker);
+  if (!looksLikeTicker) {
+    const searchResults = await fmpGet("/stable/search-symbol?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
+    if (Array.isArray(searchResults) && searchResults.length) {
+      const exact = searchResults.find(r => r.symbol?.toUpperCase() === ticker);
+      ticker = (exact || searchResults[0]).symbol;
+    }
   }
 
   // Step 2: fetch all data in parallel
@@ -1698,11 +1702,15 @@ async function fetchFMPData(nameOrTicker) {
     || (latestCf.operatingCashFlow != null && latestCf.capitalExpenditure != null
         ? latestCf.operatingCashFlow - Math.abs(latestCf.capitalExpenditure) : null);
   const fcfMargin = fcf != null && rev ? (fcf / rev * 100).toFixed(1) + "%" : null;
-  const roic      = latestKm.roic != null ? (latestKm.roic * 100).toFixed(1) + "%" : null;
+  // FMP key-metrics: returnOnInvestedCapital (decimal 0-1), fallback to roic
+  const roicDecimal = latestKm.returnOnInvestedCapital ?? latestKm.roic ?? null;
+  const roic = roicDecimal != null ? (Math.abs(roicDecimal) <= 1.5 ? roicDecimal * 100 : roicDecimal).toFixed(1) + "%" : null;
 
-  const currentPE = p.pe ? +p.pe.toFixed(1) : (latestKm.peRatio ? +latestKm.peRatio.toFixed(1) : null);
-  const peAnnual  = km.filter(r => r.peRatio > 0 && r.peRatio < 300)
-    .map(r => ({ year: parseInt(r.date?.slice(0, 4)), pe: +r.peRatio.toFixed(1) }))
+  // FMP profile: pe field; key-metrics: priceEarningsRatio (not peRatio which is a different field)
+  const peVal = p.pe ?? p.priceEarningsRatio ?? latestKm.priceEarningsRatio ?? latestKm.peRatio ?? null;
+  const currentPE = peVal != null && peVal > 0 && peVal < 1000 ? +Number(peVal).toFixed(1) : null;
+  const peAnnual  = km.filter(r => (r.priceEarningsRatio ?? r.peRatio) > 0 && (r.priceEarningsRatio ?? r.peRatio) < 300)
+    .map(r => { const pe = r.priceEarningsRatio ?? r.peRatio; return { year: parseInt(r.date?.slice(0, 4)), pe: +Number(pe).toFixed(1) }; })
     .filter(r => r.year).reverse();
   const historicPEs = peAnnual.map(r => r.pe);
   const tenYearAvg  = historicPEs.length
@@ -1774,8 +1782,9 @@ async function fetchFMPData(nameOrTicker) {
       const shareGrowth5yRaw = sharesAll.length >= 2 && sharesAll[shrN] > 0
         ? ((sharesAll[0] / sharesAll[shrN]) - 1) * 100 : null;
 
-      // ROIC — FMP key-metrics roic is 0-1 ratio
-      const roicRaw = latestKm.roic != null ? (Math.abs(latestKm.roic) <= 1.5 ? latestKm.roic * 100 : latestKm.roic) : null;
+      // ROIC — FMP key-metrics: returnOnInvestedCapital (0-1), fallback to roic
+      const roicDecimalRaw = latestKm.returnOnInvestedCapital ?? latestKm.roic ?? null;
+      const roicRaw = roicDecimalRaw != null ? (Math.abs(roicDecimalRaw) <= 1.5 ? roicDecimalRaw * 100 : roicDecimalRaw) : null;
       const pegRaw  = latestKm.priceEarningsToGrowthRatio ?? latestKm.pegRatio ?? p.peg ?? null;
       const mktCap  = p.mktCap ?? null;
       const fcfYieldRaw = latestKm.freeCashFlowYield != null
@@ -1789,7 +1798,7 @@ async function fetchFMPData(nameOrTicker) {
         revenueGrowth: revGrowth,
         netIncome:     fmt(netIncomeRaw),
         fcfMargin,
-        roic:          roicRaw != null ? roicRaw.toFixed(1) + "%" : null,
+        roic:          roicRaw != null ? roicRaw.toFixed(1) + "%" : (roic || null),
         peRatio:       currentPE ? currentPE.toString() : null,
         evEbitda:      latestKm.evToEbitda ? latestKm.evToEbitda.toFixed(1) : null,
         debtToEquity:  latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
