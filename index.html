@@ -1704,19 +1704,18 @@ async function fiscalResolveCompany(nameOrTicker) {
   const upper = nameOrTicker.toUpperCase().replace(/[^A-Z0-9.]/g, "");
   const lower = nameOrTicker.toLowerCase();
 
-  // Paginate through companies-list until we find a match (max 5 pages of 200)
-  const PAGE_SIZE = 200;
-  const MAX_PAGES = 5;
+  // Use small pageSize=5 (confirmed working with test), paginate up to 20 pages
+  const PAGE_SIZE = 5;
+  const MAX_PAGES = 20;
 
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const resp = await fiscalGet("/v2/companies-list?pageNumber=" + page + "&pageSize=" + PAGE_SIZE).catch(e => { console.warn("[Fiscal] companies-list page", page, "failed:", e.message); return null; });
+    const resp = await fiscalGet("/v2/companies-list?pageNumber=" + page + "&pageSize=" + PAGE_SIZE)
+      .catch(e => { console.warn("[Fiscal] companies-list page", page, "failed:", e.message); return null; });
     if (!resp) break;
     const list = resp?.data || (Array.isArray(resp) ? resp : []);
-    if (!list.length) break; // no more results
+    if (!list.length) break;
 
-    // Priority: exact ticker > starts-with ticker > name includes
     const match = list.find(r => r.ticker?.toUpperCase() === upper)
-      || list.find(r => r.ticker?.toUpperCase().startsWith(upper) && upper.length >= 2)
       || list.find(r => r.name?.toLowerCase().includes(lower));
 
     if (match) {
@@ -1724,12 +1723,11 @@ async function fiscalResolveCompany(nameOrTicker) {
       return match;
     }
 
-    // If pagination says there are no more pages, stop early
     const total = resp?.pagination?.totalCount || resp?.pagination?.total || null;
     if (total != null && page * PAGE_SIZE >= total) break;
   }
 
-  throw new Error('Fiscal.ai: no match for "' + nameOrTicker + '" in first ' + (MAX_PAGES * PAGE_SIZE) + ' companies');
+  throw new Error('Fiscal.ai: no match for "' + nameOrTicker + '"');
 }
 
 async function fetchFiscalData(nameOrTicker) {
@@ -1964,14 +1962,17 @@ async function fmpGet(path) {
     throw new Error('Network error reaching FMP worker. (' + networkErr.message + ')');
   }
   console.log('[FMP] Response status:', res.status, 'for path:', path);
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    console.log('[FMP] Error body:', errText);
-    throw new Error('FMP worker ' + res.status + ': ' + path);
+  // Always try to parse JSON — even error responses may contain useful info
+  const text = await res.text().catch(() => '');
+  console.log('[FMP] Raw response:', text.slice(0, 200));
+  if (!res.ok) throw new Error('FMP ' + res.status + ' for ' + path + ': ' + text.slice(0, 100));
+  try {
+    const data = JSON.parse(text);
+    console.log('[FMP] Parsed OK — type:', Array.isArray(data) ? 'array['+data.length+']' : typeof data);
+    return data;
+  } catch {
+    throw new Error('FMP returned non-JSON for ' + path + ': ' + text.slice(0, 100));
   }
-  const data = await res.json();
-  console.log('[FMP] Data for', path, '— type:', Array.isArray(data) ? 'array['+data.length+']' : typeof data, Array.isArray(data) && data[0] ? 'first keys:' + Object.keys(data[0]).slice(0,5).join(',') : '');
-  return data;
 }
 
 async function fetchFMPData(nameOrTicker) {
