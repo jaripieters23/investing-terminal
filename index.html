@@ -1671,6 +1671,7 @@ async function refreshWatchlist() {
 async function fiscalGet(path) {
   // Worker accepts POST { path } and forwards as GET to https://api.fiscal.ai + path
   let res;
+  console.log('[Fiscal] POST to worker with path:', path);
   try {
     res = await fetch(WORKERS.fiscal, {
       method: 'POST',
@@ -1680,14 +1681,21 @@ async function fiscalGet(path) {
   } catch (networkErr) {
     throw new Error('Network error reaching Fiscal.ai worker. (' + networkErr.message + ')');
   }
+  console.log('[Fiscal] Response status:', res.status, 'for path:', path);
   if (res.status === 429) {
     _fiscalRateLimited = true;
     _fiscalRateLimitResetAt = Date.now() + 3600000;
     updateFiscalStatus();
     throw Object.assign(new Error('fiscal_rate_limited'), { rateLimited: true });
   }
-  if (!res.ok) throw new Error('Fiscal.ai worker ' + res.status + ': ' + path);
-  return res.json();
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.log('[Fiscal] Error body:', errText);
+    throw new Error('Fiscal.ai worker ' + res.status + ': ' + path);
+  }
+  const data = await res.json();
+  console.log('[Fiscal] Data received for', path, '— keys:', Object.keys(data || {}));
+  return data;
 }
 
 async function fiscalResolveCompany(nameOrTicker) {
@@ -1929,14 +1937,23 @@ async function fetchFiscalData(nameOrTicker) {
 
 async function fmpGet(path) {
   // Worker forwards: https://fmp-proxy.jaripieters.workers.dev/stable/X → https://financialmodelingprep.com/stable/X?apikey=KEY
+  const fullUrl = WORKERS.fmp + path;
+  console.log('[FMP] GET', fullUrl);
   let res;
   try {
-    res = await fetch(WORKERS.fmp + path, { method: 'GET' });
+    res = await fetch(fullUrl, { method: 'GET' });
   } catch (networkErr) {
     throw new Error('Network error reaching FMP worker. (' + networkErr.message + ')');
   }
-  if (!res.ok) throw new Error('FMP worker ' + res.status + ': ' + path);
-  return res.json();
+  console.log('[FMP] Response status:', res.status, 'for path:', path);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.log('[FMP] Error body:', errText);
+    throw new Error('FMP worker ' + res.status + ': ' + path);
+  }
+  const data = await res.json();
+  console.log('[FMP] Data for', path, '— type:', Array.isArray(data) ? 'array['+data.length+']' : typeof data, Array.isArray(data) && data[0] ? 'first keys:' + Object.keys(data[0]).slice(0,5).join(',') : '');
+  return data;
 }
 
 async function fetchFMPData(nameOrTicker) {
