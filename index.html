@@ -1246,21 +1246,26 @@ async function scoreStock(name) {
   const pegRatio  = pct(fin.pegRatio);
   const fcfYield  = pct(fin.fcfYield);        // FCF / Market Cap %
 
-  // All 14 quantitative criteria
+  // Helper to format display values
+  const fmtPct  = v => v != null ? v.toFixed(1) + '%' : null;
+  const fmtNum  = v => v != null ? v.toFixed(2) : null;
+  const fmtX    = v => v != null ? v.toFixed(1) + 'x' : null;
+
+  // All 13 quantitative criteria (with value for display)
   const quant = [
-    { key:'roic',          label:'ROIC ≥ 15%',                  icon:'💰', pass: roic      != null ? roic >= 15       : null },
-    { key:'grossMargin',   label:'Gross Margin ≥ 40%',          icon:'📊', pass: grossM    != null ? grossM >= 40     : null },
-    { key:'opMargin',      label:'Operating Margin ≥ 15%',      icon:'📈', pass: opM       != null ? opM >= 15        : null },
-    { key:'revCagr',       label:'Revenue CAGR ≥ 5% (5Y)',      icon:'🚀', pass: revCagr   != null ? revCagr >= 5     : null },
-    { key:'epsCagr',       label:'EPS CAGR ≥ 10% (5Y)',         icon:'💹', pass: epsCagr   != null ? epsCagr >= 10    : null },
-    { key:'netDebtEbitda', label:'Net Debt/EBITDA ≤ 3',         icon:'🏦', pass: netDebt   != null && netDebt < 0 ? true : (netDebtEbitda != null ? netDebtEbitda <= 3 : null) },
-    { key:'intCov',        label:'Interest Coverage ≥ 5',       icon:'🛡️', pass: intCov    != null ? intCov >= 5      : null },
-    { key:'fcfPositive',   label:'FCF > 0',                     icon:'💵', pass: fcf       != null ? fcf > 0          : null },
-    { key:'fcfConv',       label:'FCF Conversion ≥ 80%',        icon:'🔄', pass: fcfConv   != null ? fcfConv >= 0.80  : null },
-    { key:'shareDilution', label:'Share Count Growth ≤ 0 (5Y)', icon:'📉', pass: shareGrowth5y != null ? shareGrowth5y <= 0 : null },
-    { key:'peVsGrowth',    label:'P/E ≤ Expected EPS Growth',   icon:'🎯', pass: fwdPE != null && epsGrowth != null ? fwdPE <= epsGrowth : null },
-    { key:'peg',           label:'PEG ≤ 2',                     icon:'⚖️', pass: pegRatio  != null ? pegRatio <= 2    : null },
-    { key:'fcfYield',      label:'FCF Yield ≥ EPS Growth / 2',  icon:'🌱', pass: fcfYield != null && epsGrowth != null ? fcfYield >= epsGrowth / 2 : null },
+    { key:'roic',          label:'ROIC ≥ 15%',                  icon:'💰', value: fmtPct(roic),           pass: roic      != null ? roic >= 15       : null },
+    { key:'grossMargin',   label:'Gross Margin ≥ 40%',          icon:'📊', value: fmtPct(grossM),         pass: grossM    != null ? grossM >= 40     : null },
+    { key:'opMargin',      label:'Operating Margin ≥ 15%',      icon:'📈', value: fmtPct(opM),            pass: opM       != null ? opM >= 15        : null },
+    { key:'revCagr',       label:'Revenue CAGR ≥ 5% (5Y)',      icon:'🚀', value: fmtPct(revCagr),        pass: revCagr   != null ? revCagr >= 5     : null },
+    { key:'epsCagr',       label:'EPS CAGR ≥ 10% (5Y)',         icon:'💹', value: fmtPct(epsCagr),        pass: epsCagr   != null ? epsCagr >= 10    : null },
+    { key:'netDebtEbitda', label:'Net Debt/EBITDA ≤ 3',         icon:'🏦', value: netDebt != null && netDebt < 0 ? 'Net cash' : fmtX(netDebtEbitda), pass: netDebt != null && netDebt < 0 ? true : (netDebtEbitda != null ? netDebtEbitda <= 3 : null) },
+    { key:'intCov',        label:'Interest Coverage ≥ 5',       icon:'🛡️', value: fmtX(intCov),           pass: intCov    != null ? intCov >= 5      : null },
+    { key:'fcfPositive',   label:'FCF > 0',                     icon:'💵', value: fcf != null ? (fcf >= 1e9 ? (fcf/1e9).toFixed(1)+'B' : fcf >= 1e6 ? (fcf/1e6).toFixed(0)+'M' : fcf.toFixed(0)) : null, pass: fcf != null ? fcf > 0 : null },
+    { key:'fcfConv',       label:'FCF Conversion ≥ 80%',        icon:'🔄', value: fmtPct(fcfConv != null ? fcfConv * 100 : null), pass: fcfConv != null ? fcfConv >= 0.80 : null },
+    { key:'shareDilution', label:'Share Count Growth ≤ 0 (5Y)', icon:'📉', value: fmtPct(shareGrowth5y),  pass: shareGrowth5y != null ? shareGrowth5y <= 0 : null },
+    { key:'peVsGrowth',    label:'P/E ≤ EPS Growth',            icon:'🎯', value: fwdPE != null ? fwdPE.toFixed(1) + (epsGrowth != null ? ' vs ' + epsGrowth.toFixed(1) + '%' : '') : null, pass: fwdPE != null && epsGrowth != null ? fwdPE <= epsGrowth : null },
+    { key:'peg',           label:'PEG ≤ 2',                     icon:'⚖️', value: fmtNum(pegRatio),       pass: pegRatio  != null ? pegRatio <= 2    : null },
+    { key:'fcfYield',      label:'FCF Yield ≥ EPS Growth / 2',  icon:'🌱', value: fmtPct(fcfYield),       pass: fcfYield  != null && epsGrowth != null ? fcfYield >= epsGrowth / 2 : null },
   ];
 
   // Count only criteria where we have data
@@ -1375,7 +1380,8 @@ function renderScanResults() {
     const quantRows = (s.quantCriteria || []).map(q => {
       const icon = q.pass === true ? '✓' : q.pass === false ? '✗' : '—';
       const col  = q.pass === true ? 'var(--green)' : q.pass === false ? 'var(--red)' : 'var(--text-3)';
-      return `<div class="criteria-row"><span class="crit-icon">${q.icon}</span><span class="crit-label">${q.label}</span><span style="margin-left:auto;font-size:13px;font-weight:700;color:${col}">${icon}</span></div>`;
+      const val  = q.value ? `<span style="font-size:10px;color:var(--text-3);margin-right:4px">${q.value}</span>` : '';
+      return `<div class="criteria-row"><span class="crit-icon">${q.icon}</span><span class="crit-label">${q.label}</span><span style="margin-left:auto;display:flex;align-items:center;gap:2px">${val}<span style="font-size:13px;font-weight:700;color:${col};min-width:14px;text-align:right">${icon}</span></span></div>`;
     }).join('');
 
     // Qualitative criteria bars (1-5 → bar)
@@ -1676,13 +1682,7 @@ async function fetchFMPData(nameOrTicker) {
   const inc = Array.isArray(income)     ? income     : (income ? [income]     : []);
   const cf  = Array.isArray(cashFlow)   ? cashFlow   : (cashFlow ? [cashFlow] : []);
   const km  = Array.isArray(keyMetrics) ? keyMetrics : (keyMetrics ? [keyMetrics] : []);
-  console.log('[FMP RAW] profile:', JSON.stringify(p).slice(0,500));
-  console.log('[FMP RAW] inc[0]:', JSON.stringify(inc[0]||{}).slice(0,500));
-  console.log('[FMP RAW] cf[0]:', JSON.stringify(cf[0]||{}).slice(0,500));
-  console.log('[FMP RAW] km[0] part1:', JSON.stringify(km[0]||{}).slice(0,500));
-  console.log('[FMP RAW] km[0] part2:', JSON.stringify(km[0]||{}).slice(500,1000));
-  console.log('[FMP RAW] km[0] part3:', JSON.stringify(km[0]||{}).slice(1000,1500));
-  console.log('[FMP RAW] pt:', JSON.stringify(pt));
+
   // price-target-consensus returns flat object: { targetHigh, targetLow, targetMean, targetConsensus }
   const pt  = Array.isArray(priceTarget) ? priceTarget[0] : (priceTarget || null);
 
@@ -1709,15 +1709,18 @@ async function fetchFMPData(nameOrTicker) {
     || (latestCf.operatingCashFlow != null && latestCf.capitalExpenditure != null
         ? latestCf.operatingCashFlow - Math.abs(latestCf.capitalExpenditure) : null);
   const fcfMargin = fcf != null && rev ? (fcf / rev * 100).toFixed(1) + "%" : null;
-  // FMP key-metrics: returnOnInvestedCapital (decimal 0-1), fallback to roic
-  const roicDecimal = latestKm.returnOnInvestedCapital ?? latestKm.roic ?? null;
-  const roic = roicDecimal != null ? (Math.abs(roicDecimal) <= 1.5 ? roicDecimal * 100 : roicDecimal).toFixed(1) + "%" : null;
+  // ROIC — confirmed: returnOnInvestedCapital (decimal 0-1)
+  const roic = latestKm.returnOnInvestedCapital != null
+    ? (latestKm.returnOnInvestedCapital * 100).toFixed(1) + "%" : null;
 
-  // FMP profile: pe field; key-metrics: priceEarningsRatio (not peRatio which is a different field)
-  const peVal = p.pe ?? p.priceEarningsRatio ?? latestKm.priceEarningsRatio ?? latestKm.peRatio ?? null;
-  const currentPE = peVal != null && peVal > 0 && peVal < 1000 ? +Number(peVal).toFixed(1) : null;
-  const peAnnual  = km.filter(r => (r.priceEarningsRatio ?? r.peRatio) > 0 && (r.priceEarningsRatio ?? r.peRatio) < 300)
-    .map(r => { const pe = r.priceEarningsRatio ?? r.peRatio; return { year: parseInt(r.date?.slice(0, 4)), pe: +Number(pe).toFixed(1) }; })
+  // PE not in key-metrics — compute from profile price / latest EPS
+  const latestEPS = latestInc.eps ?? latestInc.epsdiluted ?? null;
+  const peComputed = p.price && latestEPS && latestEPS > 0 ? p.price / latestEPS : null;
+  const currentPE = peComputed != null && peComputed > 0 && peComputed < 1000
+    ? +peComputed.toFixed(1) : null;
+  // PE history: use earningsYield from key-metrics (1/earningsYield = PE)
+  const peAnnual = km.filter(r => r.earningsYield && r.earningsYield > 0 && (1/r.earningsYield) < 300)
+    .map(r => ({ year: parseInt(r.date?.slice(0, 4)), pe: +(1/r.earningsYield).toFixed(1) }))
     .filter(r => r.year).reverse();
   const historicPEs = peAnnual.map(r => r.pe);
   const tenYearAvg  = historicPEs.length
@@ -1766,12 +1769,11 @@ async function fetchFMPData(nameOrTicker) {
 
       const ebitda = latestInc.ebitda ?? null;
       // FMP key-metrics has netDebt directly
-      const netDebtRawVal = latestKm.netDebt != null ? latestKm.netDebt
-        : (latestInc.totalDebt != null && latestInc.cashAndCashEquivalents != null
-          ? latestInc.totalDebt - latestInc.cashAndCashEquivalents : null);
-      const netDebtEbitdaRaw = netDebtRawVal != null && ebitda && ebitda > 0
-        ? netDebtRawVal / ebitda
-        : (latestKm.netDebtToEBITDA ?? latestKm['net-debt-to-ebitda'] ?? null);
+      // netDebtToEBITDA available directly in key-metrics
+      const netDebtEbitdaRaw = latestKm.netDebtToEBITDA ?? null;
+      // netDebtRaw: derive from investedCapital if possible, else from income stmt
+      const netDebtRawVal = latestInc.totalDebt != null && latestInc.cashAndCashEquivalents != null
+        ? latestInc.totalDebt - latestInc.cashAndCashEquivalents : null;
 
       const interestExp = latestInc.interestExpense != null ? Math.abs(latestInc.interestExpense) : null;
       const interestCovRaw = opIncome != null && interestExp && interestExp > 0
@@ -1789,13 +1791,16 @@ async function fetchFMPData(nameOrTicker) {
       const shareGrowth5yRaw = sharesAll.length >= 2 && sharesAll[shrN] > 0
         ? ((sharesAll[0] / sharesAll[shrN]) - 1) * 100 : null;
 
-      // ROIC — FMP key-metrics: returnOnInvestedCapital (0-1), fallback to roic
-      const roicDecimalRaw = latestKm.returnOnInvestedCapital ?? latestKm.roic ?? null;
-      const roicRaw = roicDecimalRaw != null ? (Math.abs(roicDecimalRaw) <= 1.5 ? roicDecimalRaw * 100 : roicDecimalRaw) : null;
-      const pegRaw  = latestKm.priceEarningsToGrowthRatio ?? latestKm.pegRatio ?? p.peg ?? null;
+      // ROIC — confirmed field name: returnOnInvestedCapital (decimal 0-1)
+      const roicDecimalRaw = latestKm.returnOnInvestedCapital ?? null;
+      const roicRaw = roicDecimalRaw != null ? roicDecimalRaw * 100 : null;
+      // PEG not in key-metrics — compute: PE / EPS CAGR if available
+      const pegRaw = (currentPE && epsCagr5yRaw && epsCagr5yRaw > 0)
+        ? currentPE / epsCagr5yRaw : null;
       const mktCap  = p.marketCap ?? p.mktCap ?? null;
+      // freeCashFlowYield confirmed in key-metrics (decimal 0-1)
       const fcfYieldRaw = latestKm.freeCashFlowYield != null
-        ? (Math.abs(latestKm.freeCashFlowYield) <= 1 ? latestKm.freeCashFlowYield * 100 : latestKm.freeCashFlowYield)
+        ? latestKm.freeCashFlowYield * 100
         : (fcfRawVal != null && mktCap && mktCap > 0 ? (fcfRawVal / mktCap) * 100 : null);
 
       return {
@@ -1805,10 +1810,10 @@ async function fetchFMPData(nameOrTicker) {
         revenueGrowth: revGrowth,
         netIncome:     fmt(netIncomeRaw),
         fcfMargin,
-        roic:          roicRaw != null ? roicRaw.toFixed(1) + "%" : (roic || null),
+        roic:          roicRaw != null ? roicRaw.toFixed(1) + "%" : null,
         peRatio:       currentPE ? currentPE.toString() : null,
-        evEbitda:      latestKm.evToEbitda ? latestKm.evToEbitda.toFixed(1) : null,
-        debtToEquity:  latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
+        evEbitda:      latestKm.evToEBITDA ? Number(latestKm.evToEBITDA).toFixed(1) : null,
+        debtToEquity:  null, // not available in FMP key-metrics free tier
         dividendYield: (p.lastDividend ?? p.lastDiv) && p.price ? (((p.lastDividend ?? p.lastDiv) / p.price) * 100).toFixed(2) + "%" : null,
         // Quantitative scoring fields (raw numbers)
         grossMargin:       grossMarginRaw,
@@ -2017,7 +2022,8 @@ function renderStockDetail(d) {
         ${d.quantCriteria.map(q => {
           const icon = q.pass === true ? '✓' : q.pass === false ? '✗' : '—';
           const col  = q.pass === true ? 'var(--green)' : q.pass === false ? 'var(--red)' : 'var(--text-3)';
-          return `<div style="display:flex;align-items:center;gap:7px"><span style="font-size:14px">${q.icon}</span><span style="font-size:11px;color:var(--text-2);flex:1">${q.label}</span><span style="font-size:13px;font-weight:700;color:${col}">${icon}</span></div>`;
+          const val  = q.value ? `<span style="font-size:10px;color:var(--text-3);margin-right:4px">${q.value}</span>` : '';
+          return `<div style="display:flex;align-items:center;gap:7px"><span style="font-size:14px">${q.icon}</span><span style="font-size:11px;color:var(--text-2);flex:1">${q.label}</span>${val}<span style="font-size:13px;font-weight:700;color:${col};min-width:14px;text-align:right">${icon}</span></div>`;
         }).join('')}
       </div>
       ${d.quantScore != null ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">Quantitative score: <strong style="color:var(--text)">${d.quantScore}/100</strong></div>` : ''}
