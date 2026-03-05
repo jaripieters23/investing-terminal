@@ -1259,7 +1259,8 @@ async function scoreStock(name) {
 
   // ── Step 2: Compute quantitative criteria (rule-based) ────────────────────
   const fin  = realData?.financials || {};
-  const pct  = v => { if (v == null) return null; const n = parseFloat(v); return isNaN(n) ? null : n; };
+  // Fields are raw numbers (not "18.2%" strings) — just null-check
+  const pct  = v => (v == null || (typeof v === 'string' && v === '')) ? null : +v;
 
   // Parse stored string values back to numbers
   const roic      = pct(fin.roic);           // e.g. "18.2%" → 18.2
@@ -1787,21 +1788,99 @@ async function fetchFiscalData(nameOrTicker) {
     employees:   p.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
     description: p.description || null,
     livePrice,
-    financials: {
-      marketCap:     fmt(p.marketCap || p.mktCap),
-      revenue:       fmt(rev),
-      revenueGrowth: revGrowth,
-      netIncome:     fmt(latestInc.netIncome),
-      fcfMargin,
-      roic:          latestRat.returnOnCapitalEmployed != null
-        ? (latestRat.returnOnCapitalEmployed * 100).toFixed(1) + "%" : null,
-      peRatio:       peRatioVal ? peRatioVal.toFixed(1) : null,
-      evEbitda:      latestRat.evToEbitda || latestRat.enterpriseValueEbitda
-        ? (latestRat.evToEbitda || latestRat.enterpriseValueEbitda).toFixed(1) : null,
-      debtToEquity:  latestRat.debtToEquity ? latestRat.debtToEquity.toFixed(2) : null,
-      dividendYield: latestRat.dividendYield
-        ? (latestRat.dividendYield * 100).toFixed(2) + "%" : null,
-    },
+    financials: (() => {
+      // ── Quantitative scoring fields ──────────────────────────────────────
+      // Gross margin (ratio → %)
+      const grossMarginRaw = latestInc.grossProfit != null && rev
+        ? latestInc.grossProfit / rev * 100
+        : (latestRat.grossProfitMargin != null ? latestRat.grossProfitMargin * 100 : null);
+
+      // Operating margin
+      const opIncome = latestInc.operatingIncome || latestInc.ebit;
+      const operatingMarginRaw = opIncome != null && rev ? opIncome / rev * 100
+        : (latestRat.operatingProfitMargin != null ? latestRat.operatingProfitMargin * 100 : null);
+
+      // Revenue CAGR 5Y — use oldest vs latest from incs array (up to 10 years fetched)
+      const revsAll = incs.map(r => r.revenue || r.totalRevenue).filter(v => v > 0);
+      const revCagr5yRaw = revsAll.length >= 2
+        ? (Math.pow(revsAll[0] / revsAll[Math.min(4, revsAll.length - 1)], 1 / Math.min(4, revsAll.length - 1)) - 1) * 100
+        : null;
+
+      // EPS CAGR 5Y
+      const epsAll = incs.map(r => r.eps || r.earningsPerShare).filter(v => v != null && v > 0);
+      const epsCagr5yRaw = epsAll.length >= 2
+        ? (Math.pow(epsAll[0] / epsAll[Math.min(4, epsAll.length - 1)], 1 / Math.min(4, epsAll.length - 1)) - 1) * 100
+        : null;
+
+      // Net Debt / EBITDA
+      const ebitda = latestInc.ebitda || (opIncome != null && latestInc.depreciationAndAmortization != null
+        ? opIncome + latestInc.depreciationAndAmortization : null);
+      const totalDebt = latestInc.totalDebt || p.totalDebt || null;
+      const cashVal   = latestInc.cashAndCashEquivalents || p.cash || null;
+      const netDebtRawVal = totalDebt != null && cashVal != null ? totalDebt - cashVal : null;
+      const netDebtEbitdaRaw = netDebtRawVal != null && ebitda ? netDebtRawVal / ebitda : null;
+
+      // Interest coverage (EBIT / interest expense)
+      const interestExp = latestInc.interestExpense ? Math.abs(latestInc.interestExpense) : null;
+      const interestCovRaw = opIncome != null && interestExp && interestExp > 0
+        ? opIncome / interestExp : null;
+
+      // FCF raw & FCF conversion
+      const fcfRawVal = latestCf.freeCashFlow
+        || (latestCf.operatingCashFlow != null && latestCf.capitalExpenditure != null
+          ? latestCf.operatingCashFlow - Math.abs(latestCf.capitalExpenditure) : null);
+      const netIncomeRaw = latestInc.netIncome;
+      const fcfConvRaw = fcfRawVal != null && netIncomeRaw && netIncomeRaw > 0
+        ? fcfRawVal / netIncomeRaw : null;
+
+      // Share count growth 5Y
+      const sharesAll = incs.map(r => r.weightedAverageShsOut || r.weightedAverageShsOutDil || r.sharesOutstanding).filter(v => v > 0);
+      const shareGrowth5yRaw = sharesAll.length >= 2
+        ? ((sharesAll[0] / sharesAll[Math.min(4, sharesAll.length - 1)]) - 1) * 100
+        : null;
+
+      // ROIC
+      const roicRaw = latestRat.returnOnCapitalEmployed != null
+        ? latestRat.returnOnCapitalEmployed * 100
+        : (latestRat.roic != null ? latestRat.roic * 100 : null);
+
+      // PEG ratio
+      const pegRaw = latestRat.priceEarningsToGrowthRatio || latestRat.peg || null;
+
+      // FCF Yield = FCF / Market Cap
+      const mktCap = p.marketCap || p.mktCap;
+      const fcfYieldRaw = fcfRawVal != null && mktCap && mktCap > 0
+        ? (fcfRawVal / mktCap) * 100 : null;
+
+      return {
+        // Display fields
+        marketCap:     fmt(mktCap),
+        revenue:       fmt(rev),
+        revenueGrowth: revGrowth,
+        netIncome:     fmt(netIncomeRaw),
+        fcfMargin,
+        roic:          roicRaw != null ? roicRaw.toFixed(1) + "%" : null,
+        peRatio:       peRatioVal ? peRatioVal.toFixed(1) : null,
+        evEbitda:      latestRat.evToEbitda || latestRat.enterpriseValueEbitda
+          ? (latestRat.evToEbitda || latestRat.enterpriseValueEbitda).toFixed(1) : null,
+        debtToEquity:  latestRat.debtToEquity ? latestRat.debtToEquity.toFixed(2) : null,
+        dividendYield: latestRat.dividendYield
+          ? (latestRat.dividendYield * 100).toFixed(2) + "%" : null,
+        // Quantitative scoring fields (raw numbers, not formatted strings)
+        grossMargin:       grossMarginRaw,
+        operatingMargin:   operatingMarginRaw,
+        revenueCagr5y:     revCagr5yRaw,
+        epsCagr5y:         epsCagr5yRaw,
+        netDebtEbitda:     netDebtEbitdaRaw,
+        interestCoverage:  interestCovRaw,
+        netDebtRaw:        netDebtRawVal,
+        fcfRaw:            fcfRawVal,
+        fcfConversion:     fcfConvRaw,
+        shareGrowth5y:     shareGrowth5yRaw,
+        pegRatio:          pegRaw,
+        fcfYield:          fcfYieldRaw,
+      };
+    })(),
     analystTargets: (p.priceTarget || p.analystTargetPrice) ? {
       low:         p.priceTargetLow        || null,
       mean:        p.priceTarget           || p.analystTargetPrice || null,
@@ -1906,18 +1985,84 @@ async function fetchFMPData(nameOrTicker) {
     employees:   p.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
     description: p.description       || null,
     livePrice:   p.price             || null,
-    financials: {
-      marketCap:     fmt(p.mktCap),
-      revenue:       fmt(rev),
-      revenueGrowth: revGrowth,
-      netIncome:     fmt(latestInc.netIncome),
-      fcfMargin,
-      roic,
-      peRatio:       currentPE ? currentPE.toString() : null,
-      evEbitda:      latestKm.evToEbitda ? latestKm.evToEbitda.toFixed(1) : null,
-      debtToEquity:  latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
-      dividendYield: p.lastDiv && p.price ? ((p.lastDiv / p.price) * 100).toFixed(2) + "%" : null,
-    },
+    financials: (() => {
+      // ── Quantitative scoring fields ──────────────────────────────────────
+      const grossMarginRaw = latestInc.grossProfit != null && rev
+        ? latestInc.grossProfit / rev * 100
+        : (latestKm.grossProfitMargin != null ? latestKm.grossProfitMargin * 100 : null);
+
+      const opIncome = latestInc.operatingIncome || latestInc.ebit;
+      const operatingMarginRaw = opIncome != null && rev ? opIncome / rev * 100
+        : (latestKm.operatingProfitMargin != null ? latestKm.operatingProfitMargin * 100 : null);
+
+      const revsAll = inc.map(r => r.revenue).filter(v => v > 0);
+      const revCagr5yRaw = revsAll.length >= 2
+        ? (Math.pow(revsAll[0] / revsAll[Math.min(4, revsAll.length - 1)], 1 / Math.min(4, revsAll.length - 1)) - 1) * 100
+        : null;
+
+      const epsAll = inc.map(r => r.eps).filter(v => v != null && v > 0);
+      const epsCagr5yRaw = epsAll.length >= 2
+        ? (Math.pow(epsAll[0] / epsAll[Math.min(4, epsAll.length - 1)], 1 / Math.min(4, epsAll.length - 1)) - 1) * 100
+        : null;
+
+      const ebitda = latestInc.ebitda || null;
+      const totalDebt = latestKm.netDebt != null && latestKm.netCash != null ? null
+        : (latestInc.totalDebt || null);
+      const netDebtRawVal = latestKm.netDebt != null ? latestKm.netDebt
+        : (totalDebt != null && latestInc.cashAndCashEquivalents != null
+          ? totalDebt - latestInc.cashAndCashEquivalents : null);
+      const netDebtEbitdaRaw = netDebtRawVal != null && ebitda && ebitda > 0
+        ? netDebtRawVal / ebitda : null;
+
+      const interestExp = latestInc.interestExpense ? Math.abs(latestInc.interestExpense) : null;
+      const interestCovRaw = opIncome != null && interestExp && interestExp > 0
+        ? opIncome / interestExp : null;
+
+      const fcfRawVal = latestCf.freeCashFlow
+        || (latestCf.operatingCashFlow != null && latestCf.capitalExpenditure != null
+          ? latestCf.operatingCashFlow - Math.abs(latestCf.capitalExpenditure) : null);
+      const netIncomeRaw = latestInc.netIncome;
+      const fcfConvRaw = fcfRawVal != null && netIncomeRaw && netIncomeRaw > 0
+        ? fcfRawVal / netIncomeRaw : null;
+
+      const sharesAll = inc.map(r => r.weightedAverageShsOut || r.weightedAverageShsOutDil).filter(v => v > 0);
+      const shareGrowth5yRaw = sharesAll.length >= 2
+        ? ((sharesAll[0] / sharesAll[Math.min(4, sharesAll.length - 1)]) - 1) * 100
+        : null;
+
+      const roicRaw = latestKm.roic != null ? latestKm.roic * 100 : null;
+      const pegRaw  = latestKm.priceEarningsToGrowthRatio || p.peg || null;
+      const mktCap  = p.mktCap;
+      const fcfYieldRaw = fcfRawVal != null && mktCap && mktCap > 0
+        ? (fcfRawVal / mktCap) * 100 : null;
+
+      return {
+        // Display fields
+        marketCap:     fmt(mktCap),
+        revenue:       fmt(rev),
+        revenueGrowth: revGrowth,
+        netIncome:     fmt(netIncomeRaw),
+        fcfMargin,
+        roic:          roicRaw != null ? roicRaw.toFixed(1) + "%" : null,
+        peRatio:       currentPE ? currentPE.toString() : null,
+        evEbitda:      latestKm.evToEbitda ? latestKm.evToEbitda.toFixed(1) : null,
+        debtToEquity:  latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
+        dividendYield: p.lastDiv && p.price ? ((p.lastDiv / p.price) * 100).toFixed(2) + "%" : null,
+        // Quantitative scoring fields (raw numbers)
+        grossMargin:       grossMarginRaw,
+        operatingMargin:   operatingMarginRaw,
+        revenueCagr5y:     revCagr5yRaw,
+        epsCagr5y:         epsCagr5yRaw,
+        netDebtEbitda:     netDebtEbitdaRaw,
+        interestCoverage:  interestCovRaw,
+        netDebtRaw:        netDebtRawVal,
+        fcfRaw:            fcfRawVal,
+        fcfConversion:     fcfConvRaw,
+        shareGrowth5y:     shareGrowth5yRaw,
+        pegRatio:          pegRaw,
+        fcfYield:          fcfYieldRaw,
+      };
+    })(),
     analystTargets: (pt?.targetLow || pt?.targetMean || pt?.targetHigh) ? {
       low:         pt.targetLow         || null,
       mean:        pt.targetMean        || null,
