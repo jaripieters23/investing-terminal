@@ -1132,9 +1132,27 @@ async function groqChat(messages, model, maxTokens) {
 
 async function groqJSON(messages, model, maxTokens) {
   const text = await groqChat(messages, model, maxTokens);
-  const clean = text.replace(/```json|```/g, '').trim();
-  try { return JSON.parse(clean); }
-  catch { const m = clean.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); throw new Error('JSON parse failed: ' + clean.slice(0, 100)); }
+  // Strip markdown fences and leading/trailing whitespace
+  let clean = text.replace(/```json|```/g, '').trim();
+  // Extract outermost JSON object
+  const start = clean.indexOf('{');
+  if (start > 0) clean = clean.slice(start);
+  // Attempt 1: parse as-is
+  try { return JSON.parse(clean); } catch {}
+  // Attempt 2: truncated — find last complete key-value and close all open braces
+  try {
+    // Remove trailing incomplete token after last comma or colon
+    let fixed = clean
+      .replace(/,\s*$/, '')           // trailing comma
+      .replace(/:\s*"[^"]*$/, ': ""') // unclosed string value
+      .replace(/:\s*$/, ': null');    // dangling colon
+    // Count unclosed braces and close them
+    let depth = 0;
+    for (const ch of fixed) { if (ch === '{') depth++; else if (ch === '}') depth--; }
+    fixed += '}'.repeat(Math.max(0, depth));
+    return JSON.parse(fixed);
+  } catch {}
+  throw new Error('JSON parse failed: ' + clean.slice(0, 120));
 }
 
 async function runConnectionTest(btnId, resultId, testFn) {
@@ -1285,28 +1303,12 @@ async function scoreStock(name) {
     : null;
 
   // ── Step 3: Qualitative scoring via Groq ──────────────────────────────────
-  const qualPrompt = `You are a quality investing analyst following Pieter Slegers' Compounding Quality methodology.
+  const qualPrompt = `You are a quality investing analyst. Score "${name}" on 7 factors for a long-term quality investor following Pieter Slegers' Compounding Quality methodology. Score each 1-5 (integer). One sentence reason each. No extra text.
 
-Evaluate "${name}" on these 7 qualitative factors. Score each from 1 to 5 (integer only).
-Maximum 2 sentences reasoning per factor. No extra commentary.
+Respond ONLY with this exact JSON structure:
+{"ticker":"TICK","name":"Full Name","qualitative":{"moat":{"score":X,"reason":"..."},"pricing":{"score":X,"reason":"..."},"management":{"score":X,"reason":"..."},"simplicity":{"score":X,"reason":"..."},"tailwinds":{"score":X,"reason":"..."},"recurring":{"score":X,"reason":"..."},"capLight":{"score":X,"reason":"..."}},"reason":"one sentence summary"}`;
 
-Respond ONLY with valid JSON, no markdown:
-{
-  "ticker": "TICK",
-  "name": "Full Company Name",
-  "qualitative": {
-    "moat":        {"score": X, "reason": "max 2 sentences"},
-    "pricing":     {"score": X, "reason": "max 2 sentences"},
-    "management":  {"score": X, "reason": "max 2 sentences"},
-    "simplicity":  {"score": X, "reason": "max 2 sentences"},
-    "tailwinds":   {"score": X, "reason": "max 2 sentences"},
-    "recurring":   {"score": X, "reason": "max 2 sentences"},
-    "capLight":    {"score": X, "reason": "max 2 sentences"}
-  },
-  "reason": "one sentence overall quality summary"
-}`;
-
-  const result = await groqJSON([{ role: 'user', content: qualPrompt }], 'llama-3.3-70b-versatile', 600);
+  const result = await groqJSON([{ role: 'user', content: qualPrompt }], 'llama-3.3-70b-versatile', 900);
   const qual   = result.qualitative || {};
   const qualScores = Object.values(qual).map(f => +(f?.score || 0)).filter(v => v > 0);
   const qualAvg    = qualScores.length ? qualScores.reduce((a,b) => a+b,0) / qualScores.length : 0;
