@@ -1255,7 +1255,7 @@ async function scoreStock(name) {
 
   // ── Step 1: Fetch real financial data for quantitative scoring ─────────────
   let realData = null;
-  try { realData = await fetchRealData(name); } catch(e) {}
+  try { realData = await fetchRealData(name); } catch(e) { console.warn('[scoreStock] fetchRealData failed for', name, ':', e.message); }
 
   // ── Step 2: Compute quantitative criteria (rule-based) ────────────────────
   const fin  = realData?.financials || {};
@@ -2135,13 +2135,24 @@ async function fetchFMPData(nameOrTicker) {
 }
 
 async function fetchRealData(nameOrTicker) {
-  // Try Fiscal.ai worker first, fall back to FMP worker on rate limit or error
+  // Try Fiscal.ai worker first, fall back to FMP on any error
   if (!_fiscalRateLimited) {
-    try { return { ...(await fetchFiscalData(nameOrTicker)), _dataSource: 'fiscal' }; }
-    catch (e) { if (!e.rateLimited) console.warn('[Fiscal.ai]', e.message); }
+    try {
+      const d = await fetchFiscalData(nameOrTicker);
+      console.log('[fetchRealData] Fiscal.ai succeeded for', nameOrTicker);
+      return { ...d, _dataSource: 'fiscal' };
+    } catch (e) {
+      console.warn('[fetchRealData] Fiscal.ai failed for', nameOrTicker, '—', e.message, '— falling back to FMP');
+    }
   }
-  try { return { ...(await fetchFMPData(nameOrTicker)), _dataSource: _fiscalRateLimited ? 'fmp-fallback' : 'fmp' }; }
-  catch (e) { throw new Error('Both Fiscal.ai and FMP workers failed: ' + e.message); }
+  console.log('[fetchRealData] Trying FMP for', nameOrTicker);
+  try {
+    const d = await fetchFMPData(nameOrTicker);
+    console.log('[fetchRealData] FMP succeeded for', nameOrTicker);
+    return { ...d, _dataSource: _fiscalRateLimited ? 'fmp-fallback' : 'fmp' };
+  } catch (e) {
+    throw new Error('Both Fiscal.ai and FMP failed: ' + e.message);
+  }
 }
 
 async function fetchCurrentPrice(ticker) {
