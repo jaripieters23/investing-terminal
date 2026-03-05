@@ -1594,7 +1594,7 @@ async function refreshWatchlist() {
         if (q?.price) priceData = { price: q.price, currency: q.currency || stock.currency };
         if (t?.targetLow || t?.targetMean) {
           stock.targetLow  = t.targetLow  || stock.targetLow;
-          stock.targetMean = t.targetMean || stock.targetMean;
+          stock.targetMean = t.targetMedian || t.targetMean || stock.targetMean;
           stock.targetHigh = t.targetHigh || stock.targetHigh;
         }
       }
@@ -1676,10 +1676,13 @@ async function fetchFMPData(nameOrTicker) {
   const inc = Array.isArray(income)     ? income     : (income ? [income]     : []);
   const cf  = Array.isArray(cashFlow)   ? cashFlow   : (cashFlow ? [cashFlow] : []);
   const km  = Array.isArray(keyMetrics) ? keyMetrics : (keyMetrics ? [keyMetrics] : []);
-  console.log('[FMP RAW] profile keys:', Object.keys(p).join(','));
-  console.log('[FMP RAW] profile sample:', JSON.stringify({pe:p.pe,mktCap:p.mktCap,price:p.price,lastDiv:p.lastDiv,priceEarningsRatio:p.priceEarningsRatio}));
-  console.log('[FMP RAW] km[0] keys:', Object.keys(km[0]||{}).join(','));
-  console.log('[FMP RAW] km[0] sample:', JSON.stringify({roic:km[0]?.roic,returnOnInvestedCapital:km[0]?.returnOnInvestedCapital,peRatio:km[0]?.peRatio,priceEarningsRatio:km[0]?.priceEarningsRatio,evToEbitda:km[0]?.evToEbitda,debtToEquity:km[0]?.debtToEquity,netDebt:km[0]?.netDebt,pegRatio:km[0]?.pegRatio}));
+  console.log('[FMP RAW] profile:', JSON.stringify(p).slice(0,500));
+  console.log('[FMP RAW] inc[0]:', JSON.stringify(inc[0]||{}).slice(0,500));
+  console.log('[FMP RAW] cf[0]:', JSON.stringify(cf[0]||{}).slice(0,500));
+  console.log('[FMP RAW] km[0] part1:', JSON.stringify(km[0]||{}).slice(0,500));
+  console.log('[FMP RAW] km[0] part2:', JSON.stringify(km[0]||{}).slice(500,1000));
+  console.log('[FMP RAW] km[0] part3:', JSON.stringify(km[0]||{}).slice(1000,1500));
+  console.log('[FMP RAW] pt:', JSON.stringify(pt));
   // price-target-consensus returns flat object: { targetHigh, targetLow, targetMean, targetConsensus }
   const pt  = Array.isArray(priceTarget) ? priceTarget[0] : (priceTarget || null);
 
@@ -1790,7 +1793,7 @@ async function fetchFMPData(nameOrTicker) {
       const roicDecimalRaw = latestKm.returnOnInvestedCapital ?? latestKm.roic ?? null;
       const roicRaw = roicDecimalRaw != null ? (Math.abs(roicDecimalRaw) <= 1.5 ? roicDecimalRaw * 100 : roicDecimalRaw) : null;
       const pegRaw  = latestKm.priceEarningsToGrowthRatio ?? latestKm.pegRatio ?? p.peg ?? null;
-      const mktCap  = p.mktCap ?? null;
+      const mktCap  = p.marketCap ?? p.mktCap ?? null;
       const fcfYieldRaw = latestKm.freeCashFlowYield != null
         ? (Math.abs(latestKm.freeCashFlowYield) <= 1 ? latestKm.freeCashFlowYield * 100 : latestKm.freeCashFlowYield)
         : (fcfRawVal != null && mktCap && mktCap > 0 ? (fcfRawVal / mktCap) * 100 : null);
@@ -1806,7 +1809,7 @@ async function fetchFMPData(nameOrTicker) {
         peRatio:       currentPE ? currentPE.toString() : null,
         evEbitda:      latestKm.evToEbitda ? latestKm.evToEbitda.toFixed(1) : null,
         debtToEquity:  latestKm.debtToEquity ? latestKm.debtToEquity.toFixed(2) : null,
-        dividendYield: p.lastDiv && p.price ? ((p.lastDiv / p.price) * 100).toFixed(2) + "%" : null,
+        dividendYield: (p.lastDividend ?? p.lastDiv) && p.price ? (((p.lastDividend ?? p.lastDiv) / p.price) * 100).toFixed(2) + "%" : null,
         // Quantitative scoring fields (raw numbers)
         grossMargin:       grossMarginRaw,
         operatingMargin:   operatingMarginRaw,
@@ -1824,7 +1827,7 @@ async function fetchFMPData(nameOrTicker) {
     })(),
     analystTargets: (pt?.targetLow || pt?.targetMean || pt?.targetHigh) ? {
       low:       pt.targetLow       || null,
-      mean:      pt.targetMean      || null,
+      mean:      pt.targetMedian    || pt.targetMean || null,
       high:      pt.targetHigh      || null,
       consensus: pt.targetConsensus || null,
     } : null,
