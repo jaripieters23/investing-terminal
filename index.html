@@ -1698,36 +1698,43 @@ async function fiscalGet(path) {
   return data;
 }
 
+// Known exchange mappings for major exchanges
+const EXCHANGE_MAP = { 'XNAS': 'NASDAQ', 'XNYS': 'NYSE', 'XAMS': 'AEX', 'XPAR': 'EPA', 'XLON': 'LSE', 'XETR': 'XETR', 'XHEL': 'XHEL' };
+
 async function fiscalResolveCompany(nameOrTicker) {
-  // companies-list: { pagination, data: [{ ticker, figi, exchangeSymbol, name, ... }] }
-  // companyKey format = exchangeSymbol + "_" + ticker  e.g. "NASDAQ_MSFT"
-  const upper = nameOrTicker.toUpperCase().replace(/[^A-Z0-9.]/g, "");
-  const lower = nameOrTicker.toLowerCase();
+  // Strategy: use FMP search to get ticker + exchange, then build companyKey
+  // This avoids the unreliable /v2/companies-list endpoint
+  const upper = nameOrTicker.toUpperCase().replace(/\s+/g, '');
 
-  // Use page[number] and page[size] format per Fiscal.ai docs
-  const PAGE_SIZE = 100;
-  const MAX_PAGES = 10;
-
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const resp = await fiscalGet("/v2/companies-list?page%5Bnumber%5D=" + page + "&page%5Bsize%5D=" + PAGE_SIZE)
-      .catch(e => { console.warn("[Fiscal] companies-list page", page, "failed:", e.message); return null; });
-    if (!resp) break;
-    const list = resp?.data || (Array.isArray(resp) ? resp : []);
-    if (!list.length) break;
-
-    const match = list.find(r => r.ticker?.toUpperCase() === upper)
-      || list.find(r => r.name?.toLowerCase().includes(lower));
-
-    if (match) {
-      console.log('[Fiscal] Resolved "' + nameOrTicker + '" → ' + match.ticker + ' on page ' + page);
-      return match;
+  // Try FMP search first to get exchange info
+  try {
+    const results = await fmpGet('/stable/search-symbol?query=' + encodeURIComponent(nameOrTicker) + '&limit=5');
+    if (Array.isArray(results) && results.length) {
+      const match = results.find(r => r.symbol?.toUpperCase() === upper) || results[0];
+      const exchangeShort = match.exchangeShortName || match.exchange || 'NASDAQ';
+      // Map FMP exchange names to Fiscal.ai exchangeSymbol format
+      const exchMap = { 'NASDAQ': 'NASDAQ', 'NYSE': 'NYSE', 'EURONEXT': 'AEX', 'LSE': 'LSE', 'XETRA': 'XETR' };
+      const exchange = exchMap[exchangeShort] || exchangeShort;
+      console.log('[Fiscal] Resolved via FMP:', match.symbol, 'exchange:', exchange);
+      return { ticker: match.symbol, figi: null, exchangeSymbol: exchange, name: match.name };
     }
-
-    const total = resp?.pagination?.totalCount || resp?.pagination?.total || null;
-    if (total != null && page * PAGE_SIZE >= total) break;
+  } catch(e) {
+    console.warn('[Fiscal] FMP search failed, trying companies-list:', e.message);
   }
 
-  throw new Error('Fiscal.ai: no match for "' + nameOrTicker + '"');
+  // Fallback: try companies-list with default page (no pagination params)
+  const resp = await fiscalGet('/v2/companies-list').catch(e => {
+    console.warn('[Fiscal] companies-list failed:', e.message); return null;
+  });
+  const list = resp?.data || (Array.isArray(resp) ? resp : []);
+  const lower = nameOrTicker.toLowerCase();
+  const match = list.find(r => r.ticker?.toUpperCase() === upper)
+    || list.find(r => r.name?.toLowerCase().includes(lower));
+  if (match) return match;
+
+  // Last resort: guess NASDAQ
+  console.warn('[Fiscal] Could not resolve "' + nameOrTicker + '" — guessing NASDAQ');
+  return { ticker: upper, figi: null, exchangeSymbol: 'NASDAQ', name: nameOrTicker };
 }
 
 async function fetchFiscalData(nameOrTicker) {
