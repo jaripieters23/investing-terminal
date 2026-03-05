@@ -1740,21 +1740,29 @@ async function fetchFiscalData(nameOrTicker) {
   const company    = await fiscalResolveCompany(nameOrTicker);
   const ticker     = company.ticker;
   const figi       = company.figi;
-  // companyKey = exchangeSymbol_ticker (e.g. NASDAQ_MSFT) as per Fiscal.ai docs
   const companyKey = company.exchangeSymbol + "_" + ticker;
+  console.log('[Fiscal] Company resolved:', { ticker, figi, companyKey, exchangeSymbol: company.exchangeSymbol });
 
-  // Step 2: fetch all endpoints in parallel
-  // - v2/company/profile: requires companyKey + figi
-  // - v1 financials: income-statement, cash-flow-statement, ratios — all use companyKey
-  // - v2/stock-prices: latest EOD price
+  // Step 2: fetch all endpoints sequentially to see which one fails
   const figiParam = figi ? "&figi=" + figi : "";
-  const catchLog = (path, p) => p.catch(e => { console.warn('[Fiscal] Failed:', path, e.message); return null; });
+
+  const catchLog = async (label, path) => {
+    try {
+      const d = await fiscalGet(path);
+      console.log('[Fiscal] OK ' + label + ':', JSON.stringify(d)?.slice(0, 200));
+      return d;
+    } catch(e) {
+      console.warn('[Fiscal] FAIL ' + label + ':', e.message);
+      return null;
+    }
+  };
+
   const [profile, income, cashflow, ratios, priceResp] = await Promise.all([
-    catchLog('/v2/company/profile',        fiscalGet("/v2/company/profile?companyKey=" + companyKey + figiParam)),
-    catchLog('/v1/income-statement',       fiscalGet("/v1/company/financials/income-statement?companyKey=" + companyKey + "&period=annual&limit=10")),
-    catchLog('/v1/cash-flow-statement',    fiscalGet("/v1/company/financials/cash-flow-statement?companyKey=" + companyKey + "&period=annual&limit=5")),
-    catchLog('/v1/ratios',                 fiscalGet("/v1/company/financials/ratios?companyKey=" + companyKey + "&period=annual&limit=10")),
-    catchLog('/v2/stock-prices',           fiscalGet("/v2/stock-prices?companyKey=" + companyKey + "&limit=1")),
+    catchLog('profile',        "/v2/company/profile?companyKey=" + companyKey + figiParam),
+    catchLog('income',         "/v1/company/financials/income-statement?companyKey=" + companyKey + "&period=annual&limit=10"),
+    catchLog('cashflow',       "/v1/company/financials/cash-flow-statement?companyKey=" + companyKey + "&period=annual&limit=5"),
+    catchLog('ratios',         "/v1/company/financials/ratios?companyKey=" + companyKey + "&period=annual&limit=10"),
+    catchLog('price',          "/v2/stock-prices?companyKey=" + companyKey + "&limit=1"),
   ]);
   console.log('[Fiscal] Endpoint results — profile:', !!profile, 'income:', !!income, 'cashflow:', !!cashflow, 'ratios:', !!ratios, 'price:', !!priceResp);
   console.log('[Fiscal] RAW profile:', JSON.stringify(profile)?.slice(0,300));
