@@ -1757,6 +1757,10 @@ async function fetchFiscalData(nameOrTicker) {
     catchLog('/v2/stock-prices',           fiscalGet("/v2/stock-prices?companyKey=" + companyKey + "&limit=1")),
   ]);
   console.log('[Fiscal] Endpoint results — profile:', !!profile, 'income:', !!income, 'cashflow:', !!cashflow, 'ratios:', !!ratios, 'price:', !!priceResp);
+  console.log('[Fiscal] RAW profile:', JSON.stringify(profile)?.slice(0,300));
+  console.log('[Fiscal] RAW income[0]:', JSON.stringify(Array.isArray(income) ? income[0] : income?.data?.[0])?.slice(0,300));
+  console.log('[Fiscal] RAW cashflow[0]:', JSON.stringify(Array.isArray(cashflow) ? cashflow[0] : cashflow?.data?.[0])?.slice(0,300));
+  console.log('[Fiscal] RAW ratios[0]:', JSON.stringify(Array.isArray(ratios) ? ratios[0] : ratios?.data?.[0])?.slice(0,300));
 
   // Normalise response shapes — all may be { data: [] } or bare arrays
   const p    = (Array.isArray(profile) ? profile[0] : (profile?.data?.[0] ?? profile)) || {};
