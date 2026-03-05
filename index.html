@@ -1928,9 +1928,7 @@ async function fetchFiscalData(nameOrTicker) {
 }
 
 async function fmpGet(path) {
-  // Worker forwards GET requests to https://financialmodelingprep.com/api + path
-  // Worker forwards to https://financialmodelingprep.com + path
-  // Worker base URL must be https://financialmodelingprep.com (no /api prefix)
+  // Worker forwards: https://fmp-proxy.jaripieters.workers.dev/stable/X → https://financialmodelingprep.com/stable/X?apikey=KEY
   let res;
   try {
     res = await fetch(WORKERS.fmp + path, { method: 'GET' });
