@@ -1731,21 +1731,77 @@ async function scoreStock(name) {
     return parts.length ? parts.join(' · ') : null;
   };
 
-  // 6 quantitative criteria
+  // 6 quantitative criteria — each has an optional `nullReason` explaining missing data
   const quant = [
-    { key:'revGrowth',     label:'Revenue Growth > 9% (5Y CAGR), > 7% (fwd)', icon:'🚀', value: fmtDual(revCagr, fwdRevGrowth, 9, 7, '5Y', 'Fwd'),   pass: revPass },
-    { key:'epsGrowth',     label:'EPS Growth > 12% (hist 5Y), fwd 2Y CAGR > 9%', icon:'💹', value: fmtDual(epsCagr, fwdEpsGrowth, 12, 9, '5Y', '2Y Fwd'),  pass: epsPass },
-    { key:'fcfConv',       label:'FCF / Net Income > 80%',                  icon:'🔄', value: fcfConv != null ? fmtPct(fcfConv * 100) : null, pass: fcfConv != null ? fcfConv > 0.80 : null },
-    { key:'netMargin',     label:'Profit Margin > 10%',                     icon:'📈', value: fmtPct(netMargin), pass: netMargin != null ? netMargin > 10 : null },
-    { key:'roic',          label:'ROIC > 15%',                              icon:'💰', value: fmtPct(roic),      pass: roic != null ? roic > 15 : null },
-    { key:'netDebtEbitda', label:'Net Debt / EBITDA < 3x',                  icon:'🏦', value: netDebt != null && netDebt < 0 ? 'Net cash' : fmtX(netDebtEbitda), pass: netDebt != null && netDebt < 0 ? true : (netDebtEbitda != null ? netDebtEbitda < 3 : null) },
+    { key:'revGrowth',
+      label:'Revenue Growth > 9% (5Y CAGR), > 7% (fwd)',
+      icon:'🚀',
+      value: fmtDual(revCagr, fwdRevGrowth, 9, 7, '5Y', 'Fwd'),
+      pass: revPass,
+      nullReason: revPass === null
+        ? (!revCagr && !fwdRevGrowth
+          ? 'No revenue history or forward estimates found in Finnhub financials for this ticker'
+          : !revCagr
+          ? 'Historical revenue series too short to compute 5Y CAGR (need ≥2 years of data)'
+          : 'Forward revenue estimates unavailable — no FMP analyst coverage for this ticker')
+        : null },
+
+    { key:'epsGrowth',
+      label:'EPS Growth > 12% (hist 5Y), fwd 2Y CAGR > 9%',
+      icon:'💹',
+      value: fmtDual(epsCagr, fwdEpsGrowth, 12, 9, '5Y', '2Y Fwd'),
+      pass: epsPass,
+      nullReason: epsPass === null
+        ? (!epsCagr && !fwdEpsGrowth
+          ? 'No EPS data found — Finnhub may not have income statement data for this ticker'
+          : !epsCagr
+          ? 'EPS history too short or negative — cannot compute 5Y CAGR (need ≥2 years of positive EPS)'
+          : 'Forward EPS estimates unavailable — no FMP analyst coverage for this ticker')
+        : null },
+
+    { key:'fcfConv',
+      label:'FCF / Net Income > 80%',
+      icon:'🔄',
+      value: fcfConv != null ? fmtPct(fcfConv * 100) : null,
+      pass: fcfConv != null ? fcfConv > 0.80 : null,
+      nullReason: fcfConv == null
+        ? 'FCF conversion requires both free cash flow and net income — one or both missing from Finnhub cash flow statement'
+        : null },
+
+    { key:'netMargin',
+      label:'Profit Margin > 10%',
+      icon:'📈',
+      value: fmtPct(netMargin),
+      pass: netMargin != null ? netMargin > 10 : null,
+      nullReason: netMargin == null
+        ? 'Net income margin requires revenue and net income — not found in Finnhub financials for this ticker'
+        : null },
+
+    { key:'roic',
+      label:'ROIC > 15%',
+      icon:'💰',
+      value: fmtPct(roic),
+      pass: roic != null ? roic > 15 : null,
+      nullReason: roic == null
+        ? 'ROIC (Return on Invested Capital) comes from FMP key-metrics — not returned for this ticker, likely outside FMP coverage'
+        : null },
+
+    { key:'netDebtEbitda',
+      label:'Net Debt / EBITDA < 3x',
+      icon:'🏦',
+      value: netDebt != null && netDebt < 0 ? 'Net cash' : fmtX(netDebtEbitda),
+      pass: netDebt != null && netDebt < 0 ? true : (netDebtEbitda != null ? netDebtEbitda < 3 : null),
+      nullReason: (netDebt == null || netDebt >= 0) && netDebtEbitda == null
+        ? 'Net Debt / EBITDA comes from FMP key-metrics — not returned for this ticker, or EBITDA is zero/negative'
+        : null },
   ];
 
   // Score: passed / 6 criteria
   const quantWithData = quant.filter(q => q.pass !== null);
   const quantPoints   = quantWithData.filter(q => q.pass).length;
+  const quantMissing  = quant.length - quantWithData.length;   // how many were skipped
   const quantScore    = quantWithData.length > 0
-    ? Math.round((quantPoints / quant.length) * 100)
+    ? Math.round((quantPoints / quantWithData.length) * 100)
     : null;
 
   // ── Step 3: Qualitative scoring via Groq ──────────────────────────────────
@@ -1785,7 +1841,8 @@ Respond ONLY with this exact JSON structure:
       _reasons: Object.fromEntries(Object.entries(qual).map(([k,v]) => [k, v?.reason || ''])),
     },
     quantCriteria: quant,   // full criteria array for rendering ✓/✗
-    quantScore,             // 0-100
+    quantScore,             // 0-100 (based only on available criteria)
+    quantMissing,           // number of criteria skipped due to missing data
     qualScore,              // 0-100
     finalScore,             // 0-100
     totalScore,             // 0-10 for backward compat
@@ -1854,7 +1911,10 @@ function renderScanResults() {
       const icon = q.pass === true ? '✓' : q.pass === false ? '✗' : '—';
       const col  = q.pass === true ? 'var(--green)' : q.pass === false ? 'var(--red)' : 'var(--text-3)';
       const val  = q.value ? `<span style="font-size:10px;color:var(--text-3);margin-right:4px">${q.value}</span>` : '';
-      return `<div class="criteria-row"><span class="crit-icon">${q.icon}</span><span class="crit-label">${q.label}</span><span style="margin-left:auto;display:flex;align-items:center;gap:2px">${val}<span style="font-size:13px;font-weight:700;color:${col};min-width:14px;text-align:right">${icon}</span></span></div>`;
+      const nullTip = q.pass === null && q.nullReason
+        ? `<div style="font-size:10px;color:var(--amber);margin-top:3px;padding-left:22px;line-height:1.4">⚠ ${q.nullReason}</div>`
+        : '';
+      return `<div style="margin-bottom:${nullTip ? '2px' : '0'}"><div class="criteria-row"><span class="crit-icon">${q.icon}</span><span class="crit-label">${q.label}</span><span style="margin-left:auto;display:flex;align-items:center;gap:2px">${val}<span style="font-size:13px;font-weight:700;color:${col};min-width:14px;text-align:right">${icon}</span></span></div>${nullTip}</div>`;
     }).join('');
 
     // Qualitative criteria bars (1-5 → bar)
@@ -1865,8 +1925,14 @@ function renderScanResults() {
     }).join('');
 
     // Score breakdown pills
-    const qnPill = s.quantScore != null ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(79,124,247,.12);color:var(--blue);border:1px solid rgba(79,124,247,.2)">Quant ${s.quantScore}%</span>` : '';
+    const qnMissing = s.quantMissing || 0;
+    const qnPill = s.quantScore != null
+      ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(79,124,247,.12);color:var(--blue);border:1px solid rgba(79,124,247,.2)">Quant ${s.quantScore}%${qnMissing > 0 ? ' <span style="color:var(--amber)">⚠</span>' : ''}</span>`
+      : '';
     const qlPill = s.qualScore  != null ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.2)">Qual ${s.qualScore}%</span>` : '';
+    const qnWarn = qnMissing > 0
+      ? `<div style="font-size:10px;color:var(--amber);margin-top:4px">⚠ Quant score based on ${6 - qnMissing}/6 criteria — ${qnMissing} data point${qnMissing > 1 ? 's' : ''} unavailable</div>`
+      : '';
 
     return `<div class="scan-card">
       <div class="scan-card-header">
@@ -1886,6 +1952,7 @@ function renderScanResults() {
       <div class="criteria-rows">${qualRows}</div>
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:10px">
         <div style="display:flex;gap:5px;flex-wrap:wrap">${qnPill}${qlPill}</div>
+        ${qnWarn}
         <div class="scan-verdict">Verdict: <span class="${verdictCls}">${s.verdict}</span> &mdash; ${s.reason || ''}</div>
         ${(() => { const at = s.realData?.analystTargets || s.analystTargets; if (!at || (!at.low && !at.mean)) return '<div style="font-size:11px;color:var(--text-3);margin-top:2px">Analyst targets: No data</div>'; const sym2 = at.currency==='USD'?'$':'€'; return '<div style="font-size:11px;color:var(--text-3);margin-top:2px">Analyst targets — Low: <span style="color:var(--green);font-weight:600">'+( at.low?sym2+at.low.toFixed(2):'—')+'</span> · Mean: <span style="font-weight:600">'+( at.mean?sym2+at.mean.toFixed(2):'—')+'</span> · High: <span style="font-weight:600">'+( at.high?sym2+at.high.toFixed(2):'—')+'</span></div>'; })()}
         <button class="wl-add-btn ${alreadyOnWl ? 'added' : ''}" id="${wlId}" onclick="toggleWatchlistFromScan('${s.name.replace(/'/g,"\\'")}',this)">${alreadyOnWl ? '★ Watchlist' : '☆ Add to watchlist'}</button>
@@ -2871,6 +2938,7 @@ function buildStockDetailData(name, scanData, realData, aiData, realError) {
     } : null),
     quantCriteria: scanData?.quantCriteria || null,
     quantScore:    scanData?.quantScore    || null,
+    quantMissing:  scanData?.quantMissing  ?? 0,
     qualScore:     scanData?.qualScore     || null,
     finalScore:    scanData?.finalScore    || null,
     totalScore:    scanData?.totalScore    || null,
@@ -2925,8 +2993,15 @@ function renderStockDetail(d) {
     const verdictPill = d.verdict
       ? '<div style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:3px 12px;border-radius:20px;background:' + (d.verdict==='BUY'?'rgba(34,197,94,.12)':d.verdict==='WATCH'?'rgba(245,158,11,.12)':'rgba(90,96,122,.12)') + ';border:1px solid ' + (d.verdict==='BUY'?'rgba(34,197,94,.3)':d.verdict==='WATCH'?'rgba(245,158,11,.3)':'rgba(90,96,122,.3)') + '"><span style="width:7px;height:7px;border-radius:50%;background:' + verdictColor + '"></span><span style="font-size:12px;font-weight:700;color:' + verdictColor + '">' + d.verdict + '</span></div>'
       : '';
+    const quantMissing = d.quantMissing || 0;
     const qnTile = d.quantScore != null
-      ? '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Quantitative · 60%</div><div style="font-size:18px;font-weight:700;color:var(--text)">' + d.quantScore + '<span style="font-size:10px;color:var(--text-3);font-weight:400">/100</span></div></div>'
+      ? '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px">'
+        + '<div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Quantitative · 60%'
+        + (quantMissing > 0 ? ' <span style="color:var(--amber)">⚠ ' + quantMissing + ' missing</span>' : '')
+        + '</div>'
+        + '<div style="font-size:18px;font-weight:700;color:var(--text)">' + d.quantScore + '<span style="font-size:10px;color:var(--text-3);font-weight:400">/100</span></div>'
+        + (quantMissing > 0 ? '<div style="font-size:10px;color:var(--amber);margin-top:3px;line-height:1.4">Based on ' + (6 - quantMissing) + '/6 criteria</div>' : '')
+        + '</div>'
       : '';
     const qlTile = d.qualScore != null
       ? '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Qualitative · 40%</div><div style="font-size:18px;font-weight:700;color:var(--text)">' + d.qualScore + '<span style="font-size:10px;color:var(--text-3);font-weight:400">/100</span></div></div>'
@@ -2960,15 +3035,23 @@ function renderStockDetail(d) {
   const quantHTML = d.quantCriteria?.length ? `
     <div class="stock-detail-card full">
       <div class="stock-card-title">Quantitative Criteria</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-top:6px">
+      <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
         ${d.quantCriteria.map(q => {
           const icon = q.pass === true ? '✓' : q.pass === false ? '✗' : '—';
           const col  = q.pass === true ? 'var(--green)' : q.pass === false ? 'var(--red)' : 'var(--text-3)';
-          const val  = q.value ? `<span style="font-size:10px;color:var(--text-3);margin-right:4px">${q.value}</span>` : '';
-          return `<div style="display:flex;align-items:center;gap:7px"><span style="font-size:14px">${q.icon}</span><span style="font-size:11px;color:var(--text-2);flex:1">${q.label}</span>${val}<span style="font-size:13px;font-weight:700;color:${col};min-width:14px;text-align:right">${icon}</span></div>`;
+          const val  = q.value ? `<span style="font-size:10px;color:var(--text-3);margin-right:6px">${q.value}</span>` : '';
+          const nullRow = q.pass === null && q.nullReason
+            ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;padding-left:26px;line-height:1.5;padding-bottom:4px;border-bottom:1px solid rgba(245,158,11,.1)">⚠ ${q.nullReason}</div>`
+            : '';
+          return `<div><div style="display:flex;align-items:center;gap:7px;padding:3px 0"><span style="font-size:14px">${q.icon}</span><span style="font-size:11px;color:var(--text-2);flex:1">${q.label}</span>${val}<span style="font-size:13px;font-weight:700;color:${col};min-width:14px;text-align:right">${icon}</span></div>${nullRow}</div>`;
         }).join('')}
       </div>
-      ${d.quantScore != null ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">Quantitative score: <strong style="color:var(--text)">${d.quantScore}/100</strong></div>` : ''}
+      ${d.quantScore != null ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">
+        Quantitative score: <strong style="color:var(--text)">${d.quantScore}/100</strong>
+        ${(d.quantMissing || 0) > 0
+          ? `<span style="margin-left:10px;color:var(--amber)">⚠ Based on ${6 - (d.quantMissing||0)}/6 criteria — ${d.quantMissing} could not be evaluated due to missing data</span>`
+          : `<span style="color:var(--text-3)"> · all 6 criteria evaluated</span>`}
+      </div>` : ''}
     </div>` : '';
 
   const qualHTML = d.scores ? `
