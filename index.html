@@ -2802,6 +2802,51 @@ function renderStockDetail(d) {
       <div style="font-size:11px;color:var(--text-3);line-height:1.6">Fiscal.ai's daily call limit was reached. Data is now coming from Financial Modeling Prep.</div></div>
     </div>` : '');
 
+  function buildScoreGauge(d) {
+    if (!d.finalScore) return '';
+    const fs = d.finalScore;
+    const scoreColor = fs >= 75 ? '#22c55e' : fs >= 55 ? '#f59e0b' : '#ef4444';
+    const scoreLabel = fs >= 75 ? 'High Quality' : fs >= 55 ? 'Average' : 'Below Average';
+    const verdictColor = d.verdict === 'BUY' ? '#22c55e' : d.verdict === 'WATCH' ? '#f59e0b' : '#5a607a';
+    const R = 52, cx = 64, cy = 70;
+    const toRad = a => a * Math.PI / 180;
+    const startAngle = 160;
+    const ax1 = cx + R*Math.cos(toRad(startAngle));
+    const ay1 = cy + R*Math.sin(toRad(startAngle));
+    const ax2 = cx + R*Math.cos(toRad(startAngle + 220));
+    const ay2 = cy + R*Math.sin(toRad(startAngle + 220));
+    const fa  = startAngle + (fs/100)*220;
+    const fx  = cx + R*Math.cos(toRad(fa));
+    const fy  = cy + R*Math.sin(toRad(fa));
+    const la  = (fs/100)*220 > 180 ? 1 : 0;
+    const fillPath = fs > 0
+      ? '<path d="M ' + ax1.toFixed(1) + ' ' + ay1.toFixed(1) + ' A ' + R + ' ' + R + ' 0 ' + la + ' 1 ' + fx.toFixed(1) + ' ' + fy.toFixed(1) + '" fill="none" stroke="' + scoreColor + '" stroke-width="11" stroke-linecap="round" style="filter:drop-shadow(0 0 8px ' + scoreColor + ')"/>'
+      : '';
+    const verdictPill = d.verdict
+      ? '<div style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:3px 12px;border-radius:20px;background:' + (d.verdict==='BUY'?'rgba(34,197,94,.12)':d.verdict==='WATCH'?'rgba(245,158,11,.12)':'rgba(90,96,122,.12)') + ';border:1px solid ' + (d.verdict==='BUY'?'rgba(34,197,94,.3)':d.verdict==='WATCH'?'rgba(245,158,11,.3)':'rgba(90,96,122,.3)') + '"><span style="width:7px;height:7px;border-radius:50%;background:' + verdictColor + '"></span><span style="font-size:12px;font-weight:700;color:' + verdictColor + '">' + d.verdict + '</span></div>'
+      : '';
+    const qnTile = d.quantScore != null
+      ? '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Quantitative · 60%</div><div style="font-size:18px;font-weight:700;color:var(--text)">' + d.quantScore + '<span style="font-size:10px;color:var(--text-3);font-weight:400">/100</span></div></div>'
+      : '';
+    const qlTile = d.qualScore != null
+      ? '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Qualitative · 40%</div><div style="font-size:18px;font-weight:700;color:var(--text)">' + d.qualScore + '<span style="font-size:10px;color:var(--text-3);font-weight:400">/100</span></div></div>'
+      : '';
+    return '<div class="stock-detail-card full" style="background:linear-gradient(135deg,rgba(79,124,247,.05),rgba(79,124,247,.01));border-color:rgba(79,124,247,.2)">'
+      + '<div class="stock-card-title" style="margin-bottom:14px">Quality Score</div>'
+      + '<div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">'
+      + '<div style="flex-shrink:0">'
+      + '<svg width="128" height="96" viewBox="0 0 128 96" style="overflow:visible">'
+      + '<path d="M ' + ax1.toFixed(1) + ' ' + ay1.toFixed(1) + ' A ' + R + ' ' + R + ' 0 1 1 ' + ax2.toFixed(1) + ' ' + ay2.toFixed(1) + '" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="11" stroke-linecap="round"/>'
+      + fillPath
+      + '<text x="' + cx + '" y="' + (cy-4) + '" text-anchor="middle" fill="' + scoreColor + '" font-size="28" font-weight="800" font-family="Inter,sans-serif">' + fs + '</text>'
+      + '<text x="' + cx + '" y="' + (cy+14) + '" text-anchor="middle" fill="rgba(255,255,255,.25)" font-size="10" font-family="Inter,sans-serif">/100</text>'
+      + '</svg></div>'
+      + '<div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:10px">'
+      + '<div><div style="font-size:22px;font-weight:800;color:' + scoreColor + ';line-height:1">' + scoreLabel + '</div>' + verdictPill + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' + qnTile + qlTile + '</div>'
+      + '</div></div></div>';
+  }
+
   const QUAL_KEYS = [
     { key:'moat',       label:'Competitive Moat',    icon:'🏰' },
     { key:'pricing',    label:'Pricing Power',       icon:'💲' },
@@ -2826,9 +2871,8 @@ function renderStockDetail(d) {
       ${d.quantScore != null ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">Quantitative score: <strong style="color:var(--text)">${d.quantScore}/100</strong></div>` : ''}
     </div>` : '';
 
-  const scoresHTML = (d.scores || d.quantCriteria) ? `
-    ${quantHTML}
-    ${d.scores ? `<div class="stock-detail-card">
+  const qualHTML = d.scores ? `
+    <div class="stock-detail-card">
       <div class="stock-card-title">Qualitative Factors</div>
       <div class="quality-scores-grid">
         ${QUAL_KEYS.map(c => {
@@ -2847,95 +2891,69 @@ function renderStockDetail(d) {
         }).join('')}
       </div>
       ${d.qualScore != null ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">Qualitative score: <strong style="color:var(--text)">${d.qualScore}/100</strong></div>` : ''}
-    </div>` : ''}
-    ${d.finalScore != null ? (() => {
-      const fs = d.finalScore;
-      const scoreColor = fs >= 75 ? '#22c55e' : fs >= 55 ? '#f59e0b' : '#ef4444';
-      const scoreLabel = fs >= 75 ? 'High Quality' : fs >= 55 ? 'Average' : 'Below Average';
-      const verdictColor = d.verdict === 'BUY' ? '#22c55e' : d.verdict === 'WATCH' ? '#f59e0b' : '#5a607a';
-      const R = 52, cx = 64, cy = 70;
-      const toRad = a => a * Math.PI / 180;
-      const startAngle = 160, endAngle = startAngle + 220;
-      const ax1 = cx + R*Math.cos(toRad(startAngle)), ay1 = cy + R*Math.sin(toRad(startAngle));
-      const ax2 = cx + R*Math.cos(toRad(endAngle)),   ay2 = cy + R*Math.sin(toRad(endAngle));
-      const fa  = startAngle + (fs/100)*220;
-      const fx  = cx + R*Math.cos(toRad(fa)), fy = cy + R*Math.sin(toRad(fa));
-      const la  = (fs/100)*220 > 180 ? 1 : 0;
-      return `<div class="stock-detail-card full" style="background:linear-gradient(135deg,rgba(79,124,247,.05),rgba(79,124,247,.01));border-color:rgba(79,124,247,.2)">
-        <div class="stock-card-title" style="margin-bottom:14px">Quality Score</div>
-        <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">
-          <div style="flex-shrink:0">
-            <svg width="128" height="96" viewBox="0 0 128 96" style="overflow:visible">
-              <path d="M ${ax1.toFixed(1)} ${ay1.toFixed(1)} A ${R} ${R} 0 1 1 ${ax2.toFixed(1)} ${ay2.toFixed(1)}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="11" stroke-linecap="round"/>
-              ${fs > 0 ? '<path d="M ' + ax1.toFixed(1) + ' ' + ay1.toFixed(1) + ' A ' + R + ' ' + R + ' 0 ' + la + ' 1 ' + fx.toFixed(1) + ' ' + fy.toFixed(1) + '" fill="none" stroke="' + scoreColor + '" stroke-width="11" stroke-linecap="round" style="filter:drop-shadow(0 0 8px ' + scoreColor + ')"/>' : ''}
-              <text x="${cx}" y="${cy-4}" text-anchor="middle" fill="${scoreColor}" font-size="28" font-weight="800" font-family="Inter,sans-serif">${fs}</text>
-              <text x="${cx}" y="${cy+14}" text-anchor="middle" fill="rgba(255,255,255,.25)" font-size="10" font-family="Inter,sans-serif">/100</text>
-            </svg>
-          </div>
-          <div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:10px">
-            <div>
-              <div style="font-size:22px;font-weight:800;color:\${scoreColor};line-height:1">\${scoreLabel}</div>
-              \${d.verdict ? \`<div style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:3px 12px;border-radius:20px;background:\${d.verdict==='BUY'?'rgba(34,197,94,.12)':d.verdict==='WATCH'?'rgba(245,158,11,.12)':'rgba(90,96,122,.12)'};border:1px solid \${d.verdict==='BUY'?'rgba(34,197,94,.3)':d.verdict==='WATCH'?'rgba(245,158,11,.3)':'rgba(90,96,122,.3)'}"><span style="width:7px;height:7px;border-radius:50%;background:\${verdictColor}"></span><span style="font-size:12px;font-weight:700;color:\${verdictColor}">\${d.verdict}</span></div>\` : ''}
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              \${d.quantScore != null ? \`<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Quantitative · 60%</div><div style="font-size:18px;font-weight:700;color:var(--text)">\${d.quantScore}<span style="font-size:10px;color:var(--text-3);font-weight:400">/100</span></div></div>\` : ''}
-              \${d.qualScore  != null ? \`<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Qualitative · 40%</div><div style="font-size:18px;font-weight:700;color:var(--text)">\${d.qualScore}<span style="font-size:10px;color:var(--text-3);font-weight:400">/100</span></div></div>\` : ''}
-            </div>
-          </div>
-        </div>
-      </div>`;
-    })() : ''}` : '';
-
-  const fmtPctRaw = v => v != null ? (v >= 0 ? '+' : '') + v.toFixed(1) + '%' : null;
-  const fmtPctColor = v => v != null ? (v >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text)';
-  const metricRow = (label, value, color) => value != null && value !== '' ? `<div class="stock-metric"><div class="stock-metric-label">${label}</div><div class="stock-metric-value" style="color:${color||'var(--text)'}">${value}</div></div>` : '';
-  const fin = d.financials;
-  const finHTML = fin ? `
-    <div class="stock-detail-card">
-      <div class="stock-card-title">Key Financials</div>
-      <div class="stock-metrics">
-        ${metricRow('Market Cap', fin.marketCap)}
-        ${metricRow('Revenue (TTM)', fin.revenue)}
-        ${metricRow('Net Income', fin.netIncome)}
-        ${metricRow('FCF Margin', fin.fcfMargin, fin.fcfMargin ? (parseFloat(fin.fcfMargin)>=15?'var(--green)':parseFloat(fin.fcfMargin)>=5?'var(--amber)':'var(--red)') : null)}
-        ${metricRow('ROIC', fin.roic, fin.roic ? (parseFloat(fin.roic)>=15?'var(--green)':parseFloat(fin.roic)>=8?'var(--amber)':'var(--red)') : null)}
-        ${metricRow('Profit Margin', fin.netIncomeMargin != null ? (fin.netIncomeMargin >= 0 ? '' : '') + fin.netIncomeMargin.toFixed(1) + '%' : null, fin.netIncomeMargin != null ? fmtPctColor(fin.netIncomeMargin) : null)}
-      </div>
-    </div>
-    <div class="stock-detail-card">
-      <div class="stock-card-title">Growth</div>
-      <div class="stock-metrics">
-        ${metricRow('Revenue Growth (YoY)', fin.revenueGrowth, fin.revenueGrowth ? (fin.revenueGrowth.startsWith('-')?'var(--red)':'var(--green)') : null)}
-        ${metricRow('Revenue 5Y CAGR', fin.revenueCagr5y != null ? fmtPctRaw(fin.revenueCagr5y) : null, fin.revenueCagr5y != null ? fmtPctColor(fin.revenueCagr5y) : null)}
-        ${metricRow('EPS 5Y CAGR', fin.epsCagr5y != null ? fmtPctRaw(fin.epsCagr5y) : null, fin.epsCagr5y != null ? fmtPctColor(fin.epsCagr5y) : null)}
-        ${metricRow('Fwd Revenue Growth', fin.fwdRevGrowth != null ? fmtPctRaw(fin.fwdRevGrowth) + ' <span style="font-size:10px;color:var(--text-3)">(est.)</span>' : null, fin.fwdRevGrowth != null ? fmtPctColor(fin.fwdRevGrowth) : null)}
-        ${metricRow('Fwd EPS Growth (2Y)', fin.fwdEpsGrowth != null ? fmtPctRaw(fin.fwdEpsGrowth) + ' <span style="font-size:10px;color:var(--text-3)">(est.)</span>' : null, fin.fwdEpsGrowth != null ? fmtPctColor(fin.fwdEpsGrowth) : null)}
-      </div>
-      ${!fin.fwdRevGrowth && !fin.fwdEpsGrowth ? `<div style="font-size:11px;color:var(--text-3);margin-top:8px;padding:7px 10px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.15);border-radius:6px">⚠ Forward estimates not available — no FMP analyst coverage</div>` : ''}
-    </div>` : `<div class="stock-detail-card"><div class="stock-card-title">Key Financials</div><div style="font-size:11px;color:var(--text-3);line-height:1.6;padding:4px 0">Financial data unavailable. Check your FMP connection in Settings.</div></div>`;
-
-  const valHTML = fin ? `
-    <div class="stock-detail-card">
-      <div class="stock-card-title">Valuation</div>
-      <div class="stock-metrics">
-        ${metricRow('P/E Ratio', fin.peRatio)}
-        ${metricRow('EV/EBITDA', fin.evEbitda != null ? fin.evEbitda + 'x' : fin.evEbitda)}
-        ${metricRow('PEG Ratio', fin.pegRatio != null ? fin.pegRatio.toFixed(1) : null, fin.pegRatio != null ? (fin.pegRatio < 1 ? 'var(--green)' : fin.pegRatio < 2 ? 'var(--amber)' : 'var(--red)') : null)}
-        ${metricRow('Dividend Yield', fin.dividendYield)}
-        ${metricRow('FCF Yield', fin.fcfYield != null ? fin.fcfYield.toFixed(1) + '%' : null)}
-      </div>
-    </div>
-    <div class="stock-detail-card">
-      <div class="stock-card-title">Balance Sheet</div>
-      <div class="stock-metrics">
-        ${metricRow('Net Debt / EBITDA', fin.netDebtEbitda != null ? (fin.netDebtEbitda < 0 ? '<span style="color:var(--green)">Net Cash</span>' : fin.netDebtEbitda.toFixed(1) + 'x') : null, fin.netDebtEbitda != null ? (fin.netDebtEbitda < 0 ? 'var(--green)' : fin.netDebtEbitda < 2 ? 'var(--green)' : fin.netDebtEbitda < 3 ? 'var(--amber)' : 'var(--red)') : null)}
-        ${metricRow('FCF Conversion', fin.fcfConversion != null ? (fin.fcfConversion * 100).toFixed(0) + '%' : null, fin.fcfConversion != null ? (fin.fcfConversion > 0.8 ? 'var(--green)' : fin.fcfConversion > 0.5 ? 'var(--amber)' : 'var(--red)') : null)}
-        ${metricRow('Gross Margin', fin.grossMargin != null ? fin.grossMargin.toFixed(1) + '%' : null, fin.grossMargin != null ? (fin.grossMargin > 50 ? 'var(--green)' : fin.grossMargin > 30 ? 'var(--amber)' : 'var(--red)') : null)}
-        ${metricRow('Operating Margin', fin.operatingMargin != null ? fin.operatingMargin.toFixed(1) + '%' : null, fin.operatingMargin != null ? fmtPctColor(fin.operatingMargin) : null)}
-        ${metricRow('Interest Coverage', fin.interestCoverage != null ? fin.interestCoverage.toFixed(1) + 'x' : null, fin.interestCoverage != null ? (fin.interestCoverage > 5 ? 'var(--green)' : fin.interestCoverage > 2 ? 'var(--amber)' : 'var(--red)') : null)}
-      </div>
     </div>` : '';
 
+  const scoresHTML = (d.scores || d.quantCriteria || d.finalScore)
+    ? buildScoreGauge(d) + quantHTML + qualHTML
+    : '';
+  function metricRow(label, value, color) {
+    if (value == null || value === '') return '';
+    return '<div class="stock-metric"><div class="stock-metric-label">' + label + '</div><div class="stock-metric-value" style="color:' + (color||'var(--text)') + '">' + value + '</div></div>';
+  }
+  function pctColor(v) { return v >= 0 ? 'var(--green)' : 'var(--red)'; }
+  function fmtPct(v)   { return v != null ? (v >= 0 ? '+' : '') + v.toFixed(1) + '%' : null; }
+
+  const fin = d.financials;
+  const finHTML = fin ? (() => {
+    const fcfM  = fin.fcfMargin   ? parseFloat(fin.fcfMargin)   : null;
+    const roicV = fin.roic        ? parseFloat(fin.roic)        : null;
+    return '<div class="stock-detail-card">'
+      + '<div class="stock-card-title">Key Financials</div>'
+      + '<div class="stock-metrics">'
+      + metricRow('Market Cap',     fin.marketCap)
+      + metricRow('Revenue (TTM)',  fin.revenue)
+      + metricRow('Net Income',     fin.netIncome)
+      + metricRow('FCF Margin',     fin.fcfMargin,     fcfM!=null?(fcfM>=15?'var(--green)':fcfM>=5?'var(--amber)':'var(--red)'):null)
+      + metricRow('ROIC',           fin.roic,          roicV!=null?(roicV>=15?'var(--green)':roicV>=8?'var(--amber)':'var(--red)'):null)
+      + metricRow('Profit Margin',  fin.netIncomeMargin!=null ? fin.netIncomeMargin.toFixed(1)+'%' : null, fin.netIncomeMargin!=null?pctColor(fin.netIncomeMargin):null)
+      + '</div></div>'
+      + '<div class="stock-detail-card">'
+      + '<div class="stock-card-title">Growth</div>'
+      + '<div class="stock-metrics">'
+      + metricRow('Revenue Growth (YoY)', fin.revenueGrowth, fin.revenueGrowth?(fin.revenueGrowth.startsWith('-')?'var(--red)':'var(--green)'):null)
+      + metricRow('Revenue 5Y CAGR',  fin.revenueCagr5y!=null?fmtPct(fin.revenueCagr5y):null,  fin.revenueCagr5y!=null?pctColor(fin.revenueCagr5y):null)
+      + metricRow('EPS 5Y CAGR',      fin.epsCagr5y!=null?fmtPct(fin.epsCagr5y):null,          fin.epsCagr5y!=null?pctColor(fin.epsCagr5y):null)
+      + metricRow('Fwd Revenue Growth', fin.fwdRevGrowth!=null?fmtPct(fin.fwdRevGrowth)+' <span style="font-size:10px;color:var(--text-3)">(est.)</span>':null, fin.fwdRevGrowth!=null?pctColor(fin.fwdRevGrowth):null)
+      + metricRow('Fwd EPS Growth (2Y)', fin.fwdEpsGrowth!=null?fmtPct(fin.fwdEpsGrowth)+' <span style="font-size:10px;color:var(--text-3)">(est.)</span>':null, fin.fwdEpsGrowth!=null?pctColor(fin.fwdEpsGrowth):null)
+      + '</div>'
+      + (!fin.fwdRevGrowth && !fin.fwdEpsGrowth ? '<div style="font-size:11px;color:var(--text-3);margin-top:8px;padding:7px 10px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.15);border-radius:6px">⚠ Forward estimates not available — no FMP analyst coverage</div>' : '')
+      + '</div>';
+  })() : '<div class="stock-detail-card"><div class="stock-card-title">Key Financials</div><div style="font-size:11px;color:var(--text-3);padding:4px 0">Financial data unavailable. Check your FMP connection in Settings.</div></div>';
+
+  const valHTML = fin ? (() => {
+    const ndEb = fin.netDebtEbitda;
+    const fcfC = fin.fcfConversion;
+    const ndLabel = ndEb!=null ? (ndEb<0?'<span style="color:var(--green)">Net Cash</span>':ndEb.toFixed(1)+'x') : null;
+    const ndColor = ndEb!=null ? (ndEb<0?'var(--green)':ndEb<2?'var(--green)':ndEb<3?'var(--amber)':'var(--red)') : null;
+    return '<div class="stock-detail-card">'
+      + '<div class="stock-card-title">Valuation</div>'
+      + '<div class="stock-metrics">'
+      + metricRow('P/E Ratio',      fin.peRatio)
+      + metricRow('EV/EBITDA',      fin.evEbitda!=null?fin.evEbitda+'x':null)
+      + metricRow('PEG Ratio',      fin.pegRatio!=null?fin.pegRatio.toFixed(1):null, fin.pegRatio!=null?(fin.pegRatio<1?'var(--green)':fin.pegRatio<2?'var(--amber)':'var(--red)'):null)
+      + metricRow('Dividend Yield', fin.dividendYield)
+      + metricRow('FCF Yield',      fin.fcfYield!=null?fin.fcfYield.toFixed(1)+'%':null)
+      + '</div></div>'
+      + '<div class="stock-detail-card">'
+      + '<div class="stock-card-title">Balance Sheet</div>'
+      + '<div class="stock-metrics">'
+      + metricRow('Net Debt / EBITDA', ndLabel, ndColor)
+      + metricRow('FCF Conversion',    fcfC!=null?(fcfC*100).toFixed(0)+'%':null, fcfC!=null?(fcfC>0.8?'var(--green)':fcfC>0.5?'var(--amber)':'var(--red)'):null)
+      + metricRow('Gross Margin',      fin.grossMargin!=null?fin.grossMargin.toFixed(1)+'%':null, fin.grossMargin!=null?(fin.grossMargin>50?'var(--green)':fin.grossMargin>30?'var(--amber)':'var(--red)'):null)
+      + metricRow('Operating Margin',  fin.operatingMargin!=null?fin.operatingMargin.toFixed(1)+'%':null, fin.operatingMargin!=null?pctColor(fin.operatingMargin):null)
+      + metricRow('Interest Coverage', fin.interestCoverage!=null?fin.interestCoverage.toFixed(1)+'x':null, fin.interestCoverage!=null?(fin.interestCoverage>5?'var(--green)':fin.interestCoverage>2?'var(--amber)':'var(--red)'):null)
+      + '</div></div>';
+  })() : '';
   const tgtsHTML = (() => {
     const at = d.analystTargets;
     const hasData = at && (at.low || at.mean || at.high);
