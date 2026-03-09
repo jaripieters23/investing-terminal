@@ -2392,7 +2392,7 @@ async function fetchStockData(nameOrTicker) {
   })() : null;
 
   // Recommendation trend (most recent)
-  const recTrend = Array.isArray(fhRecommend) && fhRecommend.length ? fhRecommend[0] : null;
+  const recTrend = Array.isArray(fhRecommend) && fhRecommend.length ? fhRecommend.slice(0, 6) : null;
 
   // Upcoming earnings
   const nextEarnings = fhEarnings?.earningsCalendar?.[0] ?? null;
@@ -2407,14 +2407,21 @@ async function fetchStockData(nameOrTicker) {
 
   const result = {
     ticker,
-    name:        p.name        || nameOrTicker,
-    exchange:    p.exchange    || null,
-    currency:    p.currency    || null,
-    sector:      p.finnhubIndustry || p.sector || null,
-    industry:    p.finnhubIndustry || null,
-    country:     p.country     || null,
-    employees:   p.employeeTotal ? Number(p.employeeTotal).toLocaleString() : null,
-    description: p.description || null,
+    name:             p.name             || nameOrTicker,
+    exchange:         p.exchange         || null,
+    currency:         p.currency         || null,
+    sector:           p.finnhubIndustry  || p.sector || null,
+    industry:         p.finnhubIndustry  || null,
+    gics:             p.gics             || null,
+    gicsSubIndustry:  p.gicsSubIndustry  || null,
+    country:          p.country          || null,
+    employees:        p.employeeTotal    ? Number(p.employeeTotal).toLocaleString() : null,
+    description:      p.description      || null,
+    ipoDate:          p.ipo              || null,
+    weburl:           p.weburl           || null,
+    phone:            p.phone            || null,
+    shareOutstanding: p.shareOutstanding || null,
+    logo:             p.logo             || null,
     livePrice,
     financials: {
       // Display fields
@@ -2922,19 +2929,27 @@ Respond ONLY with valid JSON (no markdown):
 
 function buildStockDetailData(name, scanData, realData, aiData, realError) {
   return {
-    name: realData?.name || name,
-    ticker:      realData?.ticker      || scanData?.ticker || '',
-    exchange:    realData?.exchange    || '',
-    currency:    realData?.currency    || '',
-    sector:      realData?.sector      || '',
-    industry:    realData?.industry    || '',
-    country:     realData?.country     || '',
-    employees:   realData?.employees   || null,
-    livePrice:   realData?.livePrice   || null,
-    description: aiData?.description  || realData?.description || '',
-    financials:  realData?.financials  || null,
+    name:             realData?.name             || name,
+    ticker:           realData?.ticker           || scanData?.ticker || '',
+    exchange:         realData?.exchange         || '',
+    currency:         realData?.currency         || '',
+    sector:           realData?.sector           || '',
+    industry:         realData?.industry         || '',
+    gics:             realData?.gics             || null,
+    gicsSubIndustry:  realData?.gicsSubIndustry  || null,
+    country:          realData?.country          || '',
+    employees:        realData?.employees        || null,
+    ipoDate:          realData?.ipoDate          || null,
+    weburl:           realData?.weburl           || null,
+    phone:            realData?.phone            || null,
+    shareOutstanding: realData?.shareOutstanding || null,
+    logo:             realData?.logo             || null,
+    livePrice:        realData?.livePrice        || null,
+    description:      aiData?.description        || realData?.description || '',
+    financials:     realData?.financials     || null,
     analystTargets: realData?.analystTargets || null,
-    peHistory:   realData?.peHistory   || null,
+    peHistory:      realData?.peHistory      || null,
+    recTrend:       realData?.recTrend       || null,
     scores:       scanData?.scores      || (aiData?.qualityScores ? {
       moat: aiData.qualityScores.moat?.score || aiData.qualityScores.moat || 0,
       pricing: aiData.qualityScores.pricing?.score || 0,
@@ -3182,6 +3197,71 @@ function renderStockDetail(d) {
     </div>`;
   })();
 
+  const recHTML = (() => {
+    const recs = d.recTrend;
+    if (!recs || !recs.length) return '';
+    const canvasId = 'rec-chart-' + Date.now();
+    // Most recent first — reverse for chronological display
+    const rows = [...recs].reverse();
+    setTimeout(() => {
+      const ctx = document.getElementById(canvasId);
+      if (!ctx) return;
+      const labels  = rows.map(r => r.period ? r.period.slice(0, 7) : '');
+      const toArray = key => rows.map(r => r[key] || 0);
+      new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Strong Buy',  data: toArray('strongBuy'),  backgroundColor: '#16a34a' },
+            { label: 'Buy',         data: toArray('buy'),         backgroundColor: '#22c55e' },
+            { label: 'Hold',        data: toArray('hold'),        backgroundColor: '#f59e0b' },
+            { label: 'Sell',        data: toArray('sell'),        backgroundColor: '#ef4444' },
+            { label: 'Strong Sell', data: toArray('strongSell'),  backgroundColor: '#b91c1c' },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { stacked: true, ticks: { color: '#5a607a', font: { size: 10 } }, grid: { display: false } },
+            y: { stacked: true, ticks: { color: '#5a607a', font: { size: 10 } }, grid: { color: 'rgba(37,43,59,.5)' } },
+          },
+          plugins: {
+            legend: { position: 'bottom', labels: { color: '#9ba3b8', font: { size: 10 }, boxWidth: 12, padding: 10 } },
+            tooltip: { backgroundColor: '#1c2130', titleColor: '#9ba3b8', bodyColor: '#e8eaf0', borderColor: '#252b3b', borderWidth: 1 },
+          },
+        },
+      });
+    }, 80);
+    // Latest month summary
+    const latest = recs[0];
+    const total  = (latest.strongBuy || 0) + (latest.buy || 0) + (latest.hold || 0) + (latest.sell || 0) + (latest.strongSell || 0);
+    const bullish = (latest.strongBuy || 0) + (latest.buy || 0);
+    const bearish = (latest.sell || 0) + (latest.strongSell || 0);
+    const sentColor = bullish > bearish ? 'var(--green)' : bearish > bullish ? 'var(--red)' : 'var(--amber)';
+    const sentLabel = bullish > bearish ? 'Bullish' : bearish > bullish ? 'Bearish' : 'Neutral';
+    return '<div class="stock-detail-card full">'
+      + '<div class="stock-card-title">Analyst Recommendation Trend'
+      + ' <span style="font-size:10px;color:var(--text-3);text-transform:none;font-weight:400">'
+      + (latest.period ? '&nbsp;Latest: ' + latest.period.slice(0, 7) : '') + '</span></div>'
+      + '<div style="display:flex;align-items:center;gap:20px;margin:10px 0 12px;flex-wrap:wrap">'
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      + (latest.strongBuy  ? '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:#16a34a">' + latest.strongBuy  + '</div><div style="font-size:10px;color:var(--text-3)">Strong Buy</div></div>'  : '')
+      + (latest.buy        ? '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:#22c55e">' + latest.buy        + '</div><div style="font-size:10px;color:var(--text-3)">Buy</div></div>'         : '')
+      + (latest.hold       ? '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:#f59e0b">' + latest.hold       + '</div><div style="font-size:10px;color:var(--text-3)">Hold</div></div>'        : '')
+      + (latest.sell       ? '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:#ef4444">' + latest.sell       + '</div><div style="font-size:10px;color:var(--text-3)">Sell</div></div>'        : '')
+      + (latest.strongSell ? '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:#b91c1c">' + latest.strongSell + '</div><div style="font-size:10px;color:var(--text-3)">Strong Sell</div></div>' : '')
+      + '</div>'
+      + '<div style="margin-left:auto;text-align:right">'
+      + '<div style="font-size:18px;font-weight:700;color:' + sentColor + '">' + sentLabel + '</div>'
+      + '<div style="font-size:10px;color:var(--text-3)">' + total + ' analysts · ' + bullish + ' bullish / ' + bearish + ' bearish</div>'
+      + '</div>'
+      + '</div>'
+      + '<div class="pe-chart-wrap"><canvas id="' + canvasId + '"></canvas></div>'
+      + '</div>';
+  })();
+
   const peHTML = d.peHistory ? (() => {
     const canvasId = 'pe-chart-' + Date.now();
     setTimeout(() => {
@@ -3242,9 +3322,6 @@ function renderStockDetail(d) {
   document.getElementById('stock-page').innerHTML = `
     <div class="stock-detail-topbar">
       <button class="stock-back-btn" onclick="showPage('${_prevPage}')">&#8592; Back</button>
-      ${d.ticker ? `<span class="stock-ticker-badge">${d.ticker}</span>` : ''}
-      ${d.exchange ? `<span class="stock-sector-badge">${d.exchange}</span>` : ''}
-      ${d.sector ? `<span class="stock-sector-badge">${d.sector}</span>` : ''}
       <div style="flex:1"></div>
       ${srcBadge}
       <button class="wl-add-btn ${onWl ? 'added' : ''}" onclick="toggleWLFromDetail('${d.name.replace(/'/g,"\\'")}',this)">
@@ -3254,23 +3331,43 @@ function renderStockDetail(d) {
     <div class="stock-detail-body">
       ${noDataBanner}
       <div class="stock-hero">
-        <div class="stock-hero-logo"><img src="https://logo.clearbit.com/${encodeURIComponent((d.name||'').split(' ')[0].toLowerCase())}.com" onerror="this.style.display='none';this.parentNode.textContent='${(d.name||'?')[0].toUpperCase()}'" alt="${d.name}"></div>
+        <div class="stock-hero-logo"><img src="${d.logo || ('https://logo.clearbit.com/' + encodeURIComponent((d.name||'').split(' ')[0].toLowerCase()) + '.com')}" onerror="this.style.display='none';this.parentNode.textContent='${(d.name||'?')[0].toUpperCase()}'" alt="${d.name}"></div>
         <div class="stock-hero-info">
           <div class="stock-hero-name">${d.name}</div>
           <div class="stock-hero-meta">
-            ${d.country ? `<span class="stock-sector-badge">${d.country}</span>` : ''}
-            ${d.industry ? `<span class="stock-sector-badge">${d.industry}</span>` : ''}
-            ${d.employees ? `<span class="stock-sector-badge">${d.employees} employees</span>` : ''}
+            ${d.ticker   ? `<span class="stock-sector-badge" style="font-weight:600;color:var(--text-2)">${d.ticker}</span>` : ''}
+            ${d.exchange ? `<span class="stock-sector-badge">${d.exchange}</span>` : ''}
+            ${d.country  ? `<span class="stock-sector-badge">${d.country}</span>` : ''}
+            ${d.sector   ? `<span class="stock-sector-badge">${d.sector}</span>` : ''}
+            ${d.gicsSubIndustry && d.gicsSubIndustry !== d.sector ? `<span class="stock-sector-badge">${d.gicsSubIndustry}</span>` : ''}
           </div>
         </div>
         ${d.livePrice ? `<div class="stock-hero-price"><div class="stock-price-value">${sym}${d.livePrice.toFixed(2)}</div><div class="stock-price-change" style="color:var(--text-3)">${d.currency || ''}</div></div>` : ''}
       </div>
       ${d.description ? `<div class="stock-detail-card full" style="margin-bottom:14px"><div class="stock-card-title">About</div><div class="stock-desc">${d.description}</div></div>` : ''}
+      <div class="stock-detail-card full" style="margin-bottom:14px">
+        <div class="stock-card-title">Company Profile</div>
+        <div class="stock-metrics" style="margin-top:10px">
+          ${d.ticker           ? '<div class="stock-metric"><div class="stock-metric-label">Ticker</div><div class="stock-metric-value" style="font-weight:700">' + d.ticker + '</div></div>' : ''}
+          ${d.exchange         ? '<div class="stock-metric"><div class="stock-metric-label">Exchange</div><div class="stock-metric-value">' + d.exchange + '</div></div>' : ''}
+          ${d.currency         ? '<div class="stock-metric"><div class="stock-metric-label">Currency</div><div class="stock-metric-value">' + d.currency + '</div></div>' : ''}
+          ${d.country          ? '<div class="stock-metric"><div class="stock-metric-label">Country</div><div class="stock-metric-value">' + d.country + '</div></div>' : ''}
+          ${d.sector           ? '<div class="stock-metric"><div class="stock-metric-label">Industry (Finnhub)</div><div class="stock-metric-value">' + d.sector + '</div></div>' : ''}
+          ${d.gics             ? '<div class="stock-metric"><div class="stock-metric-label">GICS Sector</div><div class="stock-metric-value">' + d.gics + '</div></div>' : ''}
+          ${d.gicsSubIndustry  ? '<div class="stock-metric"><div class="stock-metric-label">GICS Sub-Industry</div><div class="stock-metric-value">' + d.gicsSubIndustry + '</div></div>' : ''}
+          ${d.employees        ? '<div class="stock-metric"><div class="stock-metric-label">Employees</div><div class="stock-metric-value">' + d.employees + '</div></div>' : ''}
+          ${d.shareOutstanding ? '<div class="stock-metric"><div class="stock-metric-label">Shares Outstanding</div><div class="stock-metric-value">' + Number(d.shareOutstanding * 1e6).toLocaleString() + '</div></div>' : ''}
+          ${d.ipoDate          ? '<div class="stock-metric"><div class="stock-metric-label">IPO Date</div><div class="stock-metric-value">' + d.ipoDate + '</div></div>' : ''}
+          ${d.phone            ? '<div class="stock-metric"><div class="stock-metric-label">Phone</div><div class="stock-metric-value" style="font-size:11px">' + d.phone + '</div></div>' : ''}
+          ${d.weburl           ? '<div class="stock-metric" style="grid-column:1/-1"><div class="stock-metric-label">Website</div><div class="stock-metric-value"><a href="' + d.weburl + '" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">' + d.weburl.replace(/^https?:\/\//, '') + ' ↗</a></div></div>' : ''}
+        </div>
+      </div>
       <div class="stock-detail-grid">
         ${scoresHTML}
         ${finHTML}
         ${valHTML}
         ${tgtsHTML}
+        ${recHTML}
         ${peHTML}
         ${bullBearHTML}
         ${risksHTML}
