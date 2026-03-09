@@ -2412,7 +2412,7 @@ function renderScreenerResults(passed, failed, done, total) {
     if (!stocks.length) return '';
     const rows = stocks.map(s => `
       <tr onclick="showStockDetail('${s.name || s.ticker}','screener')" style="cursor:pointer">
-        <td><div style="font-weight:600;font-size:13px">${s.ticker}${s.currentPrice ? ` <span style="font-size:11px;font-weight:400;color:var(--text-2)">${s.currency === 'USD' ? '$' : s.currency === 'GBP' ? '£' : '€'}${s.currentPrice.toFixed(2)}</span>` : ''}</div><div style="font-size:11px;color:var(--text-3)">${s.name}</div></td>
+        <td><div style="font-weight:600;font-size:13px">${s.ticker} <span style="font-size:11px;font-weight:400;color:${s.currentPrice ? 'var(--text-2)' : 'var(--text-3)'}">${s.currentPrice ? `${s.currency === 'USD' ? '$' : s.currency === 'GBP' ? '£' : '€'}${s.currentPrice.toFixed(2)}` : 'No price'}</span></div><div style="font-size:11px;color:var(--text-3)">${s.name}</div></td>
         <td class="right">${passIcon(s.criteria.revPass)}</td>
         <td class="right">${passIcon(s.criteria.epsPass)}</td>
         <td class="right">${passIcon(s.criteria.fcfPass)}</td>
