@@ -1688,7 +1688,6 @@ async function scoreStock(name) {
 
   // ── Step 2: Compute quantitative criteria (rule-based) ────────────────────
   const fin  = realData?.financials || {};
-  console.log('[Quant Debug] financials for', name, JSON.stringify(fin, null, 2));
   // Handle both raw numbers and "18.2%" formatted strings
   const pct = v => {
     if (v == null) return null;
@@ -1938,7 +1937,7 @@ function renderScanResults() {
       <div class="scan-card-header">
         <div>
           <div class="scan-card-name" style="cursor:pointer" onclick="showStockDetail('${s.name.replace(/'/g,"\\'")}','scan')">${s.name} ${portfolioBadge}</div>
-          <div class="scan-card-ticker">${s.ticker || ''}${s.realData?.currentPrice ? ` &nbsp;·&nbsp; <span style="color:var(--text-2);font-weight:600">${s.realData.currency === 'USD' ? '$' : s.realData.currency === 'GBP' ? '£' : '€'}${s.realData.currentPrice.toFixed(2)}</span>` : ''}</div>
+          <div class="scan-card-ticker">${s.ticker || ''}${s.realData?.livePrice ? ` &nbsp;·&nbsp; <span style="color:var(--text-2);font-weight:600">${s.realData.currency === 'USD' ? '$' : s.realData.currency === 'GBP' ? '£' : '€'}${s.realData.livePrice.toFixed(2)}</span>` : (s.realData && !s.realData.livePrice ? ' <span style="color:var(--text-3);font-size:10px">Price unavailable</span>' : '')}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="text-align:center">
@@ -2337,6 +2336,15 @@ async function fetchStockData(nameOrTicker) {
     ? latestKm.freeCashFlowYield * 100
     : (m.fcfYieldTTM ?? null);
 
+  // Net debt: totalDebt - cash (Finnhub balance sheet series, or metric fallback)
+  const totalDebtSeries = fhSeries('totalDebt').length ? fhSeries('totalDebt') : fhSeries('longTermDebt');
+  const cashSeries      = fhSeries('cashAndCashEquivalents').length ? fhSeries('cashAndCashEquivalents') : fhSeries('cash');
+  const netDebtRawVal   = totalDebtSeries[0] != null && cashSeries[0] != null
+    ? totalDebtSeries[0] - cashSeries[0]
+    : (m.netDebtAnnual != null ? m.netDebtAnnual
+       : (m.totalDebt != null && m.cashAndShortTermInvestments != null
+          ? (m.totalDebt - m.cashAndShortTermInvestments) * 1e6 : null));
+
   const interestCovRaw = opIncome != null && interestExp && interestExp > 0
     ? opIncome / interestExp : null;
 
@@ -2426,6 +2434,7 @@ async function fetchStockData(nameOrTicker) {
       revenueCagr5y:    revCagr5yRaw,
       epsCagr5y:        epsCagr5yRaw,
       netDebtEbitda:    netDebtEbitdaRaw,
+      netDebtRaw:       netDebtRawVal,
       interestCoverage: interestCovRaw,
       fcfRaw:           fcfRawVal,
       fcfConversion:    fcfConvRaw,
