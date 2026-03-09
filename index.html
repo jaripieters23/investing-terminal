@@ -1935,11 +1935,15 @@ function renderScanResults() {
 
     return `<div class="scan-card">
       <div class="scan-card-header">
-        <div>
+        <div style="flex:1;min-width:0">
           <div class="scan-card-name" style="cursor:pointer" onclick="showStockDetail('${s.name.replace(/'/g,"\\'")}','scan')">${s.name} ${portfolioBadge}</div>
-          <div class="scan-card-ticker">${s.ticker || ''}${s.realData?.livePrice ? ` &nbsp;·&nbsp; <span style="color:var(--text-2);font-weight:600">${s.realData.currency === 'USD' ? '$' : s.realData.currency === 'GBP' ? '£' : '€'}${s.realData.livePrice.toFixed(2)}</span>` : (s.realData && !s.realData.livePrice ? ' <span style="color:var(--text-3);font-size:10px">Price unavailable</span>' : '')}</div>
+          <div class="scan-card-ticker">${s.ticker || ''}${s.realData && !s.realData.livePrice ? ' <span style="color:var(--text-3);font-size:10px">· Price unavailable</span>' : ''}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:12px">
+          ${s.realData?.livePrice ? `<div style="text-align:right">
+            <div style="font-size:20px;font-weight:700;color:var(--text);line-height:1">${s.realData.currency === 'USD' ? '$' : s.realData.currency === 'GBP' ? '£' : '€'}${s.realData.livePrice.toFixed(2)}</div>
+            <div style="font-size:10px;color:var(--text-3);margin-top:2px">${s.realData.currency || ''} · live</div>
+          </div>` : ''}
           <div style="text-align:center">
             <div class="score-circle ${scoreCls}">${s.finalScore != null ? s.finalScore : Math.round(s.totalScore*10)}</div>
             <div class="score-label" style="text-align:center;margin-top:3px">/100</div>
@@ -3333,7 +3337,10 @@ function renderStockDetail(d) {
       <div class="stock-hero">
         <div class="stock-hero-logo"><img src="${d.logo || ('https://logo.clearbit.com/' + encodeURIComponent((d.name||'').split(' ')[0].toLowerCase()) + '.com')}" onerror="this.style.display='none';this.parentNode.textContent='${(d.name||'?')[0].toUpperCase()}'" alt="${d.name}"></div>
         <div class="stock-hero-info">
-          <div class="stock-hero-name">${d.name}</div>
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px">
+            <div class="stock-hero-name" style="margin-bottom:0">${d.name}</div>
+            ${d.livePrice ? `<div style="font-size:22px;font-weight:700;color:var(--text)">${sym}${d.livePrice.toFixed(2)}<span style="font-size:12px;font-weight:400;color:var(--text-3);margin-left:5px">${d.currency || ''}</span></div>` : ''}
+          </div>
           <div class="stock-hero-meta">
             ${d.ticker   ? `<span class="stock-sector-badge" style="font-weight:600;color:var(--text-2)">${d.ticker}</span>` : ''}
             ${d.exchange ? `<span class="stock-sector-badge">${d.exchange}</span>` : ''}
@@ -3342,7 +3349,7 @@ function renderStockDetail(d) {
             ${d.gicsSubIndustry && d.gicsSubIndustry !== d.sector ? `<span class="stock-sector-badge">${d.gicsSubIndustry}</span>` : ''}
           </div>
         </div>
-        ${d.livePrice ? `<div class="stock-hero-price"><div class="stock-price-value">${sym}${d.livePrice.toFixed(2)}</div><div class="stock-price-change" style="color:var(--text-3)">${d.currency || ''}</div></div>` : ''}
+        ${d.livePrice ? '' : ''}
       </div>
       ${d.description ? `<div class="stock-detail-card full" style="margin-bottom:14px"><div class="stock-card-title">About</div><div class="stock-desc">${d.description}</div></div>` : ''}
       <div class="stock-detail-card full" style="margin-bottom:14px">
