@@ -606,10 +606,17 @@ html{scroll-padding-top:var(--header-h)}
         </div>
       </div>
       <div class="settings-row">
-        <div class="settings-row-label"><strong>FMP — financial data</strong><span>via <code style="font-size:10px;color:var(--blue)">fmp-proxy.jaripieters.workers.dev</code></span></div>
+        <div class="settings-row-label"><strong>FMP — key metrics &amp; estimates</strong><span>via <code style="font-size:10px;color:var(--blue)">fmp-proxy.jaripieters.workers.dev</code></span></div>
         <div class="settings-row-control">
           <button class="settings-save-btn secondary" id="fmp-test-btn" onclick="testFmpConnection()">Test</button>
           <span id="fmp-test-result" class="test-result" style="color:var(--text-3)"></span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label"><strong>Finnhub — quotes, profiles &amp; financials</strong><span>via <code style="font-size:10px;color:var(--blue)">finhubb-proxy.jaripieters.workers.dev</code></span></div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" id="finnhub-test-btn" onclick="testFinnhubConnection()">Test</button>
+          <span id="finnhub-test-result" class="test-result" style="color:var(--text-3)"></span>
         </div>
       </div>
     </div>
@@ -632,7 +639,7 @@ html{scroll-padding-top:var(--header-h)}
     </div>
     <div class="settings-section">
       <div class="settings-section-header"><div class="settings-section-title">About</div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>All scoring and qualitative analysis is done by <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b-versatile for scoring, llama-3.1-8b-instant for detail pages). Financial data: FMP (Financial Modeling Prep). All calls via Cloudflare Workers &mdash; no API keys stored in the app.</span></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>All scoring and qualitative analysis is done by <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b-versatile for scoring, llama-3.1-8b-instant for detail pages). Financial data: Finnhub (quotes, profiles, financials, news) + FMP (key metrics, analyst estimates, price targets). All calls via Cloudflare Workers &mdash; no API keys stored in the app.</span></div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>Quality scoring</strong><span>Based on Pieter Slegers' <em>Compounding Quality</em>. 13 quantitative criteria (rule-based, 60%) + 7 qualitative factors scored by AI (40%). Final score /100.</span></div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>Privacy</strong><span>All portfolio data stays in your browser. API keys are stored securely in your Cloudflare Workers and never touch the app.</span></div></div>
     </div>
@@ -675,8 +682,9 @@ html{scroll-padding-top:var(--header-h)}
 // CLOUDFLARE WORKER PROXIES
 // ═══════════════════════════════════════════════════════════════
 const WORKERS = {
-  groq: 'https://groq-proxy.jaripieters.workers.dev',
-  fmp:  'https://fmp-proxy.jaripieters.workers.dev',
+  groq:    'https://groq-proxy.jaripieters.workers.dev',
+  fmp:     'https://fmp-proxy.jaripieters.workers.dev',
+  finnhub: 'https://finhubb-proxy.jaripieters.workers.dev',
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -1578,6 +1586,51 @@ async function testFmpConnection() {
   });
 }
 
+// ─── Finnhub ──────────────────────────────────────────────────────────────────
+// Routes that go via Finnhub (everything else stays FMP):
+//   /quote                        → live price
+//   /stock/profile2               → company name, exchange, sector, employees, description
+//   /stock/financials             → income statement + cash flow (annual)
+//   /search                       → symbol lookup by name
+//   /stock/symbol                 → all symbols on an exchange
+//   /company-news                 → recent news articles
+//   /stock/metric                 → basic financials (margins, ratios, growth)
+//   /stock/insider-transactions   → insider buy/sell
+//   /stock/insider-sentiment      → aggregated insider sentiment
+//   /stock/financials-reported    → GAAP-as-reported financials
+//   /stock/recommendation         → analyst recommendation trends
+//   /calendar/earnings            → upcoming / recent earnings dates
+// ─────────────────────────────────────────────────────────────────────────────
+async function finnhubGet(path) {
+  const fullUrl = WORKERS.finnhub + path;
+  console.log('[Finnhub] GET', fullUrl);
+  let res;
+  try {
+    res = await fetch(fullUrl, { method: 'GET' });
+  } catch (networkErr) {
+    throw new Error('Network error reaching Finnhub worker. (' + networkErr.message + ')');
+  }
+  console.log('[Finnhub] Response status:', res.status, 'for path:', path);
+  const text = await res.text().catch(() => '');
+  console.log('[Finnhub] Raw response:', text.slice(0, 200));
+  if (!res.ok) throw new Error('Finnhub ' + res.status + ' for ' + path + ': ' + text.slice(0, 100));
+  try {
+    const data = JSON.parse(text);
+    console.log('[Finnhub] Parsed OK — type:', Array.isArray(data) ? 'array[' + data.length + ']' : typeof data);
+    return data;
+  } catch {
+    throw new Error('Finnhub returned non-JSON for ' + path + ': ' + text.slice(0, 100));
+  }
+}
+
+async function testFinnhubConnection() {
+  await runConnectionTest('finnhub-test-btn', 'finnhub-test-result', async () => {
+    const data = await finnhubGet('/stock/profile2?symbol=AAPL');
+    if (!data?.name) throw new Error('No profile data returned');
+    return 'Connected — ' + data.name + ' (' + data.exchange + ')';
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════
 // MARKET SCAN
 // ═══════════════════════════════════════════════════════════════
@@ -2073,217 +2126,250 @@ async function fmpGet(path) {
   }
 }
 
-async function fetchFMPData(nameOrTicker) {
+async function fetchStockData(nameOrTicker) {
   const cacheKey = nameOrTicker.toLowerCase();
   if (_fmpCache[cacheKey]) return _fmpCache[cacheKey];
 
-  // All endpoints use /stable/ (current free-tier FMP API, worker base = /api)
-  // Step 1: resolve ticker via /stable/search-symbol
-  let ticker = nameOrTicker.toUpperCase().replace(/\s+/g, "");
-  // If input looks like a ticker (≤6 chars, all caps/dots), use directly; else search
+  // ── Step 1: resolve ticker ─────────────────────────────────────────────────
+  // Finnhub for symbol search; FMP as fallback
+  let ticker = nameOrTicker.toUpperCase().replace(/\s+/g, '');
   const looksLikeTicker = /^[A-Z0-9.]{1,6}$/.test(ticker);
   if (!looksLikeTicker) {
-    const searchResults = await fmpGet("/stable/search-symbol?query=" + encodeURIComponent(nameOrTicker) + "&limit=5").catch(() => []);
-    if (Array.isArray(searchResults) && searchResults.length) {
-      const exact = searchResults.find(r => r.symbol?.toUpperCase() === ticker);
-      ticker = (exact || searchResults[0]).symbol;
+    // Finnhub /search returns { count, result: [{symbol, description, type}] }
+    const fhSearch = await finnhubGet('/search?q=' + encodeURIComponent(nameOrTicker)).catch(() => null);
+    const fhHits   = fhSearch?.result?.filter(r => r.type === 'Common Stock' || r.type === '') || [];
+    if (fhHits.length) {
+      const exact = fhHits.find(r => r.description?.toLowerCase() === nameOrTicker.toLowerCase());
+      ticker = (exact || fhHits[0]).symbol;
+    } else {
+      // FMP fallback for ticker resolution
+      const fmpSearch = await fmpGet('/stable/search-symbol?query=' + encodeURIComponent(nameOrTicker) + '&limit=5').catch(() => []);
+      if (Array.isArray(fmpSearch) && fmpSearch.length) {
+        const exact = fmpSearch.find(r => r.symbol?.toUpperCase() === ticker);
+        ticker = (exact || fmpSearch[0]).symbol;
+      }
     }
   }
 
-  // Step 2: fetch all data in parallel
-  const [profileArr, income, cashFlow, keyMetrics, priceTarget, analystEst] = await Promise.all([
-    fmpGet("/stable/profile?symbol=" + ticker),
-    fmpGet("/stable/income-statement?symbol=" + ticker + "&period=annual&limit=5").catch(() => []),
-    fmpGet("/stable/cash-flow-statement?symbol=" + ticker + "&period=annual&limit=5").catch(() => []),
-    fmpGet("/stable/key-metrics?symbol=" + ticker + "&period=annual&limit=5").catch(() => []),
-    fmpGet("/stable/price-target-consensus?symbol=" + ticker).catch(() => null),
-    fmpGet("/stable/analyst-estimates?symbol=" + ticker + "&period=annual&limit=3").catch(() => []),
+  // ── Step 2: parallel fetch — Finnhub for market/company data, FMP for metrics/estimates ──
+  const [
+    fhProfile,      // Finnhub /stock/profile2      → name, exchange, sector, country, employees, description
+    fhQuote,        // Finnhub /quote                → live price, change
+    fhFinancials,   // Finnhub /stock/financials     → income + cashflow statements
+    fhMetrics,      // Finnhub /stock/metric         → margins, ratios, growth rates
+    fhRecommend,    // Finnhub /stock/recommendation → analyst recommendation trends
+    fhEarnings,     // Finnhub /calendar/earnings    → upcoming earnings
+    fhInsider,      // Finnhub /stock/insider-transactions → insider activity
+    fhNews,         // Finnhub /company-news         → recent news
+    fmpKeyMetrics,  // FMP /stable/key-metrics       → ROIC, EV/EBITDA, FCF yield, net debt/EBITDA (not in Finnhub free)
+    fmpPriceTarget, // FMP /stable/price-target-consensus
+    fmpAnalystEst,  // FMP /stable/analyst-estimates → forward EPS/Rev
+  ] = await Promise.all([
+    finnhubGet('/stock/profile2?symbol='          + ticker).catch(() => ({})),
+    finnhubGet('/quote?symbol='                   + ticker).catch(() => ({})),
+    finnhubGet('/stock/financials?symbol='        + ticker + '&statement=ic&freq=annual').catch(() => null),
+    finnhubGet('/stock/metric?symbol='            + ticker + '&metric=all').catch(() => ({})),
+    finnhubGet('/stock/recommendation?symbol='    + ticker).catch(() => []),
+    finnhubGet('/calendar/earnings?symbol='       + ticker).catch(() => ({})),
+    finnhubGet('/stock/insider-transactions?symbol=' + ticker).catch(() => ({})),
+    finnhubGet('/company-news?symbol='            + ticker + '&from=' + _dateStr(-30) + '&to=' + _dateStr(0)).catch(() => []),
+    fmpGet('/stable/key-metrics?symbol='          + ticker + '&period=annual&limit=5').catch(() => []),
+    fmpGet('/stable/price-target-consensus?symbol=' + ticker).catch(() => null),
+    fmpGet('/stable/analyst-estimates?symbol='    + ticker + '&period=annual&limit=3').catch(() => []),
   ]);
 
-  const p   = (Array.isArray(profileArr) ? profileArr[0] : profileArr) || {};
-  const inc = Array.isArray(income)     ? income     : (income ? [income]     : []);
-  const cf  = Array.isArray(cashFlow)   ? cashFlow   : (cashFlow ? [cashFlow] : []);
-  const km  = Array.isArray(keyMetrics) ? keyMetrics : (keyMetrics ? [keyMetrics] : []);
+  // ── Normalise Finnhub profile ──────────────────────────────────────────────
+  const p = fhProfile || {};
 
-  // price-target-consensus returns flat object: { targetHigh, targetLow, targetMean, targetConsensus }
-  const pt  = Array.isArray(priceTarget) ? priceTarget[0] : (priceTarget || null);
+  // ── Normalise Finnhub financials (/stock/financials returns {series:{annual:{revenue:[],netIncome:[],...}}})
+  // Each series entry: { value: number, period: "YYYY-MM-DD" }
+  const fhAnnual   = fhFinancials?.financials?.annual || {};
+  function fhSeries(key) {
+    return (fhAnnual[key] || []).map(e => e.v ?? e.value ?? e).filter(v => v != null);
+  }
+  const revenues       = fhSeries('revenue');        // newest first
+  const netIncomes     = fhSeries('netIncome');
+  const grossProfits   = fhSeries('grossProfit');
+  const opIncomes      = fhSeries('ebit');
+  const fcfSeries      = fhSeries('freeCashFlow');
+  const capexSeries    = fhSeries('capitalExpenditures');
+  const opCfSeries     = fhSeries('cashFromOperations');
+  const interestSeries = fhSeries('interestExpense');
+  const epsSeries      = fhSeries('epsBasic').length ? fhSeries('epsBasic') : fhSeries('epsDiluted');
+  const sharesSeries   = fhSeries('weightedAvgSharesOutDiluted').length
+    ? fhSeries('weightedAvgSharesOutDiluted') : fhSeries('weightedAvgSharesOut');
 
-  const ae  = Array.isArray(analystEst) ? analystEst : [];
-  const latestInc = inc[0] || {};
-  const prevInc   = inc[1] || {};
-  const latestCf  = cf[0]  || {};
-  const latestKm  = km[0]  || {};
+  // ── Basic figures ─────────────────────────────────────────────────────────
+  const livePrice = fhQuote?.c || null;   // current price
+  const rev       = revenues[0]    || null;
+  const prevRev   = revenues[1]    || null;
+  const netIncomeRaw = netIncomes[0] || null;
+
+  const fcfRawVal = fcfSeries[0]
+    ?? (opCfSeries[0] != null && capexSeries[0] != null ? opCfSeries[0] - Math.abs(capexSeries[0]) : null);
+  const opIncome  = opIncomes[0] || null;
+  const interestExp = interestSeries[0] != null ? Math.abs(interestSeries[0]) : null;
 
   function fmt(n) {
     if (n == null) return null;
     const abs = Math.abs(n);
-    if (abs >= 1e12) return (n/1e12).toFixed(2) + "T";
-    if (abs >= 1e9)  return (n/1e9).toFixed(1) + "B";
-    if (abs >= 1e6)  return (n/1e6).toFixed(1) + "M";
+    if (abs >= 1e12) return (n / 1e12).toFixed(2) + 'T';
+    if (abs >= 1e9)  return (n / 1e9).toFixed(1)  + 'B';
+    if (abs >= 1e6)  return (n / 1e6).toFixed(1)  + 'M';
     return n.toLocaleString();
   }
 
-  const rev     = latestInc.revenue;
-  const prevRev = prevInc.revenue;
+  // ── FMP key-metrics (still FMP — not available free on Finnhub) ──────────
+  const km     = Array.isArray(fmpKeyMetrics) ? fmpKeyMetrics : (fmpKeyMetrics ? [fmpKeyMetrics] : []);
+  const latestKm = km[0] || {};
+  const ae     = Array.isArray(fmpAnalystEst) ? fmpAnalystEst : [];
+  const pt     = Array.isArray(fmpPriceTarget) ? fmpPriceTarget[0] : (fmpPriceTarget || null);
+
+  // ── Finnhub /stock/metric keys ────────────────────────────────────────────
+  // metric object has keys like: 10DayAverageTradingVolume, 52WeekHigh, peBasicExclExtraTTM,
+  // revenueGrowth3Y, epsGrowth3Y, grossMarginTTM, netProfitMarginTTM, roiTTM, etc.
+  const m = fhMetrics?.metric || {};
+
+  // ── Derived financials ────────────────────────────────────────────────────
   const revGrowth = rev && prevRev && prevRev !== 0
-    ? (((rev - prevRev) / Math.abs(prevRev)) * 100).toFixed(1) + "%" : null;
+    ? (((rev - prevRev) / Math.abs(prevRev)) * 100).toFixed(1) + '%' : null;
 
-  const fcf = latestCf.freeCashFlow
-    || (latestCf.operatingCashFlow != null && latestCf.capitalExpenditure != null
-        ? latestCf.operatingCashFlow - Math.abs(latestCf.capitalExpenditure) : null);
-  const fcfMargin = fcf != null && rev ? (fcf / rev * 100).toFixed(1) + "%" : null;
-  // ROIC — confirmed: returnOnInvestedCapital (decimal 0-1)
-  const roic = latestKm.returnOnInvestedCapital != null
-    ? (latestKm.returnOnInvestedCapital * 100).toFixed(1) + "%" : null;
+  const grossProfitRaw = grossProfits[0] ?? null;
+  const grossMarginRaw = grossProfitRaw != null && rev
+    ? grossProfitRaw / rev * 100
+    : (m.grossMarginTTM != null ? m.grossMarginTTM : null);
 
-  // PE not in key-metrics — compute from profile price / latest EPS
-  const latestEPS = latestInc.eps ?? latestInc.epsdiluted ?? null;
-  const peComputed = p.price && latestEPS && latestEPS > 0 ? p.price / latestEPS : null;
-  const currentPE = peComputed != null && peComputed > 0 && peComputed < 1000
-    ? +peComputed.toFixed(1) : null;
-  // PE history: use earningsYield from key-metrics (1/earningsYield = PE)
-  const peAnnual = km.filter(r => r.earningsYield && r.earningsYield > 0 && (1/r.earningsYield) < 300)
-    .map(r => ({ year: parseInt(r.date?.slice(0, 4)), pe: +(1/r.earningsYield).toFixed(1) }))
+  const operatingMarginRaw = opIncome != null && rev
+    ? opIncome / rev * 100
+    : (m.operatingMarginTTM != null ? m.operatingMarginTTM : null);
+
+  const fcfMargin = fcfRawVal != null && rev ? (fcfRawVal / rev * 100).toFixed(1) + '%' : null;
+
+  const revsAll = revenues.filter(v => v > 0);
+  const revN    = Math.min(4, revsAll.length - 1);
+  const revCagr5yRaw = revsAll.length >= 2 && revsAll[revN] > 0
+    ? (Math.pow(revsAll[0] / revsAll[revN], 1 / revN) - 1) * 100
+    : (m['revenueGrowth5Y'] ?? m['revenueGrowthTTMYoy'] ?? null);
+
+  const epsAll = epsSeries.filter(v => v != null && v > 0);
+  const epsN   = Math.min(4, epsAll.length - 1);
+  const epsCagr5yRaw = epsAll.length >= 2 && epsAll[epsN] > 0
+    ? (Math.pow(epsAll[0] / epsAll[epsN], 1 / epsN) - 1) * 100
+    : (m['epsGrowth5Y'] ?? null);
+
+  const sharesAll = sharesSeries.filter(v => v > 0);
+  const shrN      = Math.min(4, sharesAll.length - 1);
+  const shareGrowth5yRaw = sharesAll.length >= 2 && sharesAll[shrN] > 0
+    ? ((sharesAll[0] / sharesAll[shrN]) - 1) * 100 : null;
+
+  // ROIC, EV/EBITDA, FCF yield, net debt/EBITDA — keep from FMP key-metrics
+  const roicDecimalRaw   = latestKm.returnOnInvestedCapital ?? null;
+  const roicRaw          = roicDecimalRaw != null ? roicDecimalRaw * 100 : null;
+  const netDebtEbitdaRaw = latestKm.netDebtToEBITDA ?? null;
+  const fcfYieldRaw      = latestKm.freeCashFlowYield != null
+    ? latestKm.freeCashFlowYield * 100
+    : (m.fcfYieldTTM ?? null);
+
+  const interestCovRaw = opIncome != null && interestExp && interestExp > 0
+    ? opIncome / interestExp : null;
+
+  const fcfConvRaw = fcfRawVal != null && netIncomeRaw && netIncomeRaw > 0
+    ? fcfRawVal / netIncomeRaw : null;
+
+  const mktCap = p.marketCapitalization ? p.marketCapitalization * 1e6 : null;
+
+  const latestEPS = epsAll[0] ?? null;
+  const peComputed = livePrice && latestEPS && latestEPS > 0 ? livePrice / latestEPS : null;
+  const currentPE  = peComputed != null && peComputed > 0 && peComputed < 1000
+    ? +peComputed.toFixed(1) : (m.peBasicExclExtraTTM ?? m.peTTM ?? null);
+
+  const pegRaw = currentPE && epsCagr5yRaw && epsCagr5yRaw > 0
+    ? currentPE / epsCagr5yRaw : null;
+
+  // PE history from FMP key-metrics (earningsYield)
+  const peAnnual = km.filter(r => r.earningsYield && r.earningsYield > 0 && (1 / r.earningsYield) < 300)
+    .map(r => ({ year: parseInt(r.date?.slice(0, 4)), pe: +(1 / r.earningsYield).toFixed(1) }))
     .filter(r => r.year).reverse();
   const historicPEs = peAnnual.map(r => r.pe);
   const tenYearAvg  = historicPEs.length
     ? +(historicPEs.reduce((a, b) => a + b, 0) / historicPEs.length).toFixed(1) : null;
 
+  // Forward estimates — FMP analyst-estimates
+  const fwdRevEst       = ae[0]?.estimatedRevenueAvg ?? null;
+  const fwdRevGrowthRaw = fwdRevEst && revsAll[0] && revsAll[0] > 0
+    ? (fwdRevEst / revsAll[0] - 1) * 100 : null;
+  const curEps          = epsAll[0] ?? null;
+  const fwdEpsEst1      = ae[0]?.estimatedEpsAvg ?? null;
+  const fwdEpsEst2      = ae[1]?.estimatedEpsAvg ?? null;
+  const fwdEpsGrowthRaw = fwdEpsEst2 && curEps && curEps > 0
+    ? (Math.pow(fwdEpsEst2 / curEps, 1 / 2) - 1) * 100
+    : (fwdEpsEst1 && curEps && curEps > 0 ? (fwdEpsEst1 / curEps - 1) * 100 : null);
+
+  const netIncomeMarginRaw = netIncomeRaw != null && rev && rev > 0
+    ? (netIncomeRaw / rev) * 100 : null;
+
+  // Insider summary
+  const insiderTx = Array.isArray(fhInsider?.data) ? fhInsider.data : [];
+  const insiderSummary = insiderTx.length ? (() => {
+    const buys  = insiderTx.filter(t => t.transactionType === 'P - Purchase');
+    const sells = insiderTx.filter(t => t.transactionType === 'S - Sale');
+    return { buys: buys.length, sells: sells.length, net: buys.length - sells.length };
+  })() : null;
+
+  // Recommendation trend (most recent)
+  const recTrend = Array.isArray(fhRecommend) && fhRecommend.length ? fhRecommend[0] : null;
+
+  // Upcoming earnings
+  const nextEarnings = fhEarnings?.earningsCalendar?.[0] ?? null;
+
+  // Recent news (top 5)
+  const newsItems = Array.isArray(fhNews) ? fhNews.slice(0, 5).map(n => ({
+    headline:  n.headline,
+    date:      n.datetime ? new Date(n.datetime * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '',
+    url:       n.url,
+    sentiment: n.sentiment ?? null,
+  })) : [];
+
   const result = {
     ticker,
-    name:        p.companyName       || nameOrTicker,
-    exchange:    p.exchangeShortName || p.exchange || null,
-    currency:    p.currency          || null,
-    sector:      p.sector            || null,
-    industry:    p.industry          || null,
-    country:     p.country           || null,
-    employees:   p.fullTimeEmployees ? Number(p.fullTimeEmployees).toLocaleString() : null,
-    description: p.description       || null,
-    livePrice:   p.price             || null,
-    financials: (() => {
-      // ── Quantitative scoring fields ──────────────────────────────────────
-      const grossProfitFMP = latestInc.grossProfit ?? null;
-      let grossMarginRaw = null;
-      if (grossProfitFMP != null && rev) {
-        grossMarginRaw = grossProfitFMP / rev * 100;
-      } else {
-        const gm = latestKm.grossProfitMargin ?? null;
-        if (gm != null) grossMarginRaw = Math.abs(gm) <= 1.5 ? gm * 100 : gm;
-      }
-
-      const opIncome = latestInc.operatingIncome ?? latestInc.ebit ?? null;
-      let operatingMarginRaw = null;
-      if (opIncome != null && rev) {
-        operatingMarginRaw = opIncome / rev * 100;
-      } else {
-        const om = latestKm.operatingProfitMargin ?? null;
-        if (om != null) operatingMarginRaw = Math.abs(om) <= 1.5 ? om * 100 : om;
-      }
-
-      const revsAll = inc.map(r => r.revenue ?? r.totalRevenue ?? null).filter(v => v > 0);
-      const revN = Math.min(4, revsAll.length - 1);
-      const revCagr5yRaw = revsAll.length >= 2 && revsAll[revN] > 0
-        ? (Math.pow(revsAll[0] / revsAll[revN], 1 / revN) - 1) * 100 : null;
-
-      const epsAll = inc.map(r => r.eps ?? r.epsdiluted ?? null).filter(v => v != null && v > 0);
-      const epsN = Math.min(4, epsAll.length - 1);
-      const epsCagr5yRaw = epsAll.length >= 2 && epsAll[epsN] > 0
-        ? (Math.pow(epsAll[0] / epsAll[epsN], 1 / epsN) - 1) * 100 : null;
-
-      const ebitda = latestInc.ebitda ?? null;
-      // FMP key-metrics has netDebt directly
-      // netDebtToEBITDA available directly in key-metrics
-      const netDebtEbitdaRaw = latestKm.netDebtToEBITDA ?? null;
-      // netDebtRaw: derive from investedCapital if possible, else from income stmt
-      const netDebtRawVal = latestInc.totalDebt != null && latestInc.cashAndCashEquivalents != null
-        ? latestInc.totalDebt - latestInc.cashAndCashEquivalents : null;
-
-      const interestExp = latestInc.interestExpense != null ? Math.abs(latestInc.interestExpense) : null;
-      const interestCovRaw = opIncome != null && interestExp && interestExp > 0
-        ? opIncome / interestExp : null;
-
-      const fcfRawVal = latestCf.freeCashFlow ??
-        (latestCf.operatingCashFlow != null && latestCf.capitalExpenditure != null
-          ? latestCf.operatingCashFlow - Math.abs(latestCf.capitalExpenditure) : null);
-      const netIncomeRaw = latestInc.netIncome ?? null;
-      const fcfConvRaw = fcfRawVal != null && netIncomeRaw && netIncomeRaw > 0
-        ? fcfRawVal / netIncomeRaw : null;
-
-      const sharesAll = inc.map(r => r.weightedAverageShsOut ?? r.weightedAverageShsOutDil ?? null).filter(v => v != null && v > 0);
-      const shrN = Math.min(4, sharesAll.length - 1);
-      const shareGrowth5yRaw = sharesAll.length >= 2 && sharesAll[shrN] > 0
-        ? ((sharesAll[0] / sharesAll[shrN]) - 1) * 100 : null;
-
-      // ROIC — confirmed field name: returnOnInvestedCapital (decimal 0-1)
-      const roicDecimalRaw = latestKm.returnOnInvestedCapital ?? null;
-      const roicRaw = roicDecimalRaw != null ? roicDecimalRaw * 100 : null;
-      // PEG not in key-metrics — compute inline: PE / EPS CAGR
-      const _eps = (inc[0] || {}).eps ?? (inc[0] || {}).epsdiluted ?? null;
-      const _pe  = p.price && _eps && _eps > 0 ? p.price / _eps : null;
-      const pegRaw = (_pe && _pe > 0 && _pe < 1000 && epsCagr5yRaw && epsCagr5yRaw > 0)
-        ? _pe / epsCagr5yRaw : null;
-      const mktCap  = p.marketCap ?? p.mktCap ?? null;
-      // freeCashFlowYield confirmed in key-metrics (decimal 0-1)
-      const fcfYieldRaw = latestKm.freeCashFlowYield != null
-        ? latestKm.freeCashFlowYield * 100
-        : (fcfRawVal != null && mktCap && mktCap > 0 ? (fcfRawVal / mktCap) * 100 : null);
-
-      // Forward growth from analyst estimates
-      // ae[0] is the next fiscal year estimate, ae[1] is year+2
-      // Fields: estimatedRevenueAvg, estimatedEpsAvg (confirmed FMP stable endpoint)
-      const fwdRevEst  = ae[0]?.estimatedRevenueAvg ?? null;
-      const curRev     = revsAll[0] ?? null;
-      const fwdRevGrowthRaw = fwdRevEst && curRev && curRev > 0
-        ? (fwdRevEst / curRev - 1) * 100 : null;
-
-      // EPS: normalized forward 2Y CAGR from analyst estimates
-      // ae[0] = next year, ae[1] = year+2
-      const curEps      = epsAll[0] ?? null;
-      const fwdEpsEst1  = ae[0]?.estimatedEpsAvg ?? null;
-      const fwdEpsEst2  = ae[1]?.estimatedEpsAvg ?? null;
-      // 2Y CAGR: (est_yr2 / curEps)^(1/2) - 1; fall back to 1Y if yr2 unavailable
-      const fwdEpsCagr2yRaw = fwdEpsEst2 && curEps && curEps > 0
-        ? (Math.pow(fwdEpsEst2 / curEps, 1 / 2) - 1) * 100
-        : (fwdEpsEst1 && curEps && curEps > 0
-          ? (fwdEpsEst1 / curEps - 1) * 100 : null);
-      // Keep single-year fwd eps for revenue calc compatibility
-      const fwdEpsGrowthRaw = fwdEpsCagr2yRaw;
-
-      // Net income margin
-      const netIncomeMarginRaw = netIncomeRaw != null && rev && rev > 0
-        ? (netIncomeRaw / rev) * 100 : null;
-
-      return {
-        // Display fields
-        marketCap:     fmt(mktCap),
-        revenue:       fmt(rev),
-        revenueGrowth: revGrowth,
-        netIncome:     fmt(netIncomeRaw),
-        fcfMargin,
-        roic:          roicRaw != null ? roicRaw.toFixed(1) + "%" : null,
-        peRatio:       currentPE ? currentPE.toString() : null,
-        evEbitda:      latestKm.evToEBITDA ? Number(latestKm.evToEBITDA).toFixed(1) : null,
-        debtToEquity:  null, // not available in FMP key-metrics free tier
-        dividendYield: (p.lastDividend ?? p.lastDiv) && p.price ? (((p.lastDividend ?? p.lastDiv) / p.price) * 100).toFixed(2) + "%" : null,
-        // Quantitative scoring fields (raw numbers)
-        grossMargin:       grossMarginRaw,
-        operatingMargin:   operatingMarginRaw,
-        revenueCagr5y:     revCagr5yRaw,
-        epsCagr5y:         epsCagr5yRaw,
-        netDebtEbitda:     netDebtEbitdaRaw,
-        interestCoverage:  interestCovRaw,
-        netDebtRaw:        netDebtRawVal,
-        fcfRaw:            fcfRawVal,
-        fcfConversion:     fcfConvRaw,
-        shareGrowth5y:     shareGrowth5yRaw,
-        pegRatio:          pegRaw,
-        fcfYield:          fcfYieldRaw,
-        // Forward-looking
-        fwdRevGrowth:      fwdRevGrowthRaw,
-        fwdEpsGrowth:      fwdEpsGrowthRaw,   // normalized fwd 2Y CAGR
-        netIncomeMargin:   netIncomeMarginRaw,
-      };
-    })(),
+    name:        p.name        || nameOrTicker,
+    exchange:    p.exchange    || null,
+    currency:    p.currency    || null,
+    sector:      p.finnhubIndustry || p.sector || null,
+    industry:    p.finnhubIndustry || null,
+    country:     p.country     || null,
+    employees:   p.employeeTotal ? Number(p.employeeTotal).toLocaleString() : null,
+    description: p.description || null,
+    livePrice,
+    financials: {
+      // Display fields
+      marketCap:        fmt(mktCap),
+      revenue:          fmt(rev),
+      revenueGrowth:    revGrowth,
+      netIncome:        fmt(netIncomeRaw),
+      fcfMargin,
+      roic:             roicRaw != null ? roicRaw.toFixed(1) + '%' : null,
+      peRatio:          currentPE ? currentPE.toString() : null,
+      evEbitda:         latestKm.evToEBITDA ? Number(latestKm.evToEBITDA).toFixed(1) : null,
+      dividendYield:    m.dividendYieldIndicatedAnnual != null
+                          ? m.dividendYieldIndicatedAnnual.toFixed(2) + '%' : null,
+      // Quantitative scoring fields (raw numbers)
+      grossMargin:      grossMarginRaw,
+      operatingMargin:  operatingMarginRaw,
+      revenueCagr5y:    revCagr5yRaw,
+      epsCagr5y:        epsCagr5yRaw,
+      netDebtEbitda:    netDebtEbitdaRaw,
+      interestCoverage: interestCovRaw,
+      fcfRaw:           fcfRawVal,
+      fcfConversion:    fcfConvRaw,
+      shareGrowth5y:    shareGrowth5yRaw,
+      pegRatio:         pegRaw,
+      fcfYield:         fcfYieldRaw,
+      // Forward-looking (FMP)
+      fwdRevGrowth:     fwdRevGrowthRaw,
+      fwdEpsGrowth:     fwdEpsGrowthRaw,
+      netIncomeMargin:  netIncomeMarginRaw,
+    },
     analystTargets: (pt?.targetLow || pt?.targetMean || pt?.targetHigh) ? {
       low:       pt.targetLow       || null,
       mean:      pt.targetMedian    || pt.targetMean || null,
@@ -2293,11 +2379,27 @@ async function fetchFMPData(nameOrTicker) {
     } : null,
     peHistory: (peAnnual.length && currentPE)
       ? { forwardPE: currentPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
-    _source: "fmp",
+    // Finnhub-only extras
+    insiderSummary,
+    recTrend,
+    nextEarnings,
+    recentNews: newsItems,
+    _dataSource: 'finnhub+fmp',
   };
+
   _fmpCache[cacheKey] = result;
   if (ticker) _fmpCache[ticker.toLowerCase()] = result;
   return result;
+}
+
+// Keep fetchFMPData as an alias so any other callers still work
+const fetchFMPData = fetchStockData;
+
+// Helper: date string YYYY-MM-DD offset by `days` from today
+function _dateStr(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 
@@ -2643,10 +2745,10 @@ function showPnlDetail() {
 }
 
 async function fetchRealData(nameOrTicker) {
-  const d = await fetchFMPData(nameOrTicker);
+  const d = await fetchStockData(nameOrTicker);
   const b = document.getElementById('data-source-badge');
-  if (b) { b.textContent = '● FMP'; b.className = 'topbar-badge green'; }
-  return { ...d, _dataSource: 'fmp' };
+  if (b) { b.textContent = '● Finnhub + FMP'; b.className = 'topbar-badge green'; }
+  return { ...d, _dataSource: 'finnhub+fmp' };
 }
 
 async function fetchCurrentPrice(ticker) {
@@ -2784,10 +2886,8 @@ function buildStockDetailData(name, scanData, realData, aiData, realError) {
 
 function renderStockDetail(d) {
   const sym = d.currency === 'USD' ? '$' : d.currency === 'GBP' ? '£' : '€';
-  const srcBadge = false
-    ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:5px;background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.2);white-space:nowrap">● Fiscal.ai</span>`
-    : (d._dataSource === 'fmp' || false)
-    ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:5px;background:rgba(79,124,247,.12);color:var(--blue);border:1px solid rgba(79,124,247,.2);white-space:nowrap">${false ? '⚡ FMP (fallback)' : '● FMP'}</span>`
+  const srcBadge = d._dataSource === 'finnhub+fmp'
+    ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:5px;background:rgba(79,124,247,.12);color:var(--blue);border:1px solid rgba(79,124,247,.2);white-space:nowrap">● Finnhub + FMP</span>`
     : `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:5px;background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.2);white-space:nowrap">⚠ No market data</span>`;
 
   const noDataBanner = (!d._dataSource || d._dataSource === 'none') ? `
@@ -3042,9 +3142,9 @@ function renderStockDetail(d) {
   const wlIdx = watchlist.findIndex(w => w.name === d.name);
   const onWl  = wlIdx >= 0;
 
-  const disclaimerText = d._dataSource === 'fmp'
-    ? '📡 Financial data sourced from FMP (Financial Modeling Prep). Qualitative analysis is AI-generated (Groq).'
-    : '📝 Qualitative analysis is AI-generated (Groq). No financial data — check FMP connection in Settings.';
+  const disclaimerText = d._dataSource === 'finnhub+fmp'
+    ? '📡 Market data: Finnhub (quotes, profiles, financials, news) + FMP (key metrics, analyst estimates, price targets). Qualitative analysis: AI-generated (Groq).'
+    : '📝 Qualitative analysis is AI-generated (Groq). No financial data — check Finnhub and FMP connections in Settings.';
 
   hideLoader();
   document.getElementById('stock-page').innerHTML = `
