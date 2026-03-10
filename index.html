@@ -45,7 +45,8 @@ html{overflow-x:hidden;max-width:100vw}body{display:flex;flex-direction:column;o
 .sidebar-upload-btn:hover{opacity:.88}
 .sidebar-upload-btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text-2)}
 .sidebar-upload-btn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
-#dashboard{display:none;flex:1;padding:20px 24px 40px;overflow-y:auto;background:var(--bg)}
+#dashboard{display:none;flex:1;padding:calc(var(--header-h) + 20px) 28px 40px;overflow-y:auto;background:var(--bg)}
+#dashboard-inner{max-width:1400px;margin:0 auto}
 #scan-page,#screener-page,#watchlist-page,#settings-page{display:none;flex:1;overflow-y:auto;background:var(--bg);padding-top:calc(var(--header-h) + 8px)}
 #stock-page{display:none;flex:1;overflow-y:auto;background:var(--bg)}
 #pnl-page{display:none;flex:1;overflow-y:auto;background:var(--bg)}
@@ -88,7 +89,7 @@ html{overflow-x:hidden;max-width:100vw}body{display:flex;flex-direction:column;o
 .kpi-value{font-size:20px;font-weight:600;margin-bottom:2px}
 .kpi-sub{font-size:11px;color:var(--text-3)}
 .badge-up{color:var(--green)}.badge-down{color:var(--red)}
-.perf-card{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;overflow:hidden}
+.perf-card{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:20px;overflow:hidden}
 .perf-header{padding:14px 18px 10px;display:flex;align-items:flex-start;justify-content:space-between}
 .perf-title{font-size:13px;font-weight:600}
 .perf-subtitle{font-size:11px;color:var(--text-3);margin-top:2px}
@@ -99,15 +100,15 @@ html{overflow-x:hidden;max-width:100vw}body{display:flex;flex-direction:column;o
 .perf-tab{padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text-3);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
 .perf-tab:hover{color:var(--text-2);border-color:var(--text-3)}
 .perf-tab.active{background:var(--blue);color:#fff;border-color:var(--blue)}
-.perf-chart-wrap{padding:12px 20px 16px;position:relative;height:280px}
-.bottom-grid{display:grid;grid-template-columns:340px 1fr;gap:16px}
-.charts-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start}
+.perf-chart-wrap{padding:12px 20px 20px;position:relative;height:320px}
+.bottom-grid{display:grid;grid-template-columns:460px 1fr;gap:16px;align-items:start}
+.charts-col{display:grid;grid-template-columns:1fr;gap:14px;align-content:start}
 .chart-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .chart-card-header{padding:12px 16px;border-bottom:1px solid var(--border)}
 .chart-card-title{font-size:12px;font-weight:500}
-.chart-body{padding:12px 16px 14px}
-.chart-wrap{position:relative;height:150px}
-.chart-legend{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
+.chart-body{padding:14px 20px 16px}
+.chart-wrap{position:relative;height:210px}
+.chart-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);justify-content:center}
 .chart-legend-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-2);white-space:nowrap}
 .chart-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 @keyframes chartFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -333,7 +334,7 @@ td{padding:8px 16px;vertical-align:middle}
 .loader-ring{position:absolute;inset:-10px;border:1.5px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .9s linear infinite}
 .loader-text{font-size:13px;color:var(--text-3);font-weight:500;letter-spacing:.04em}
 .loader-subtext{font-size:11px;color:var(--text-3);opacity:.6;margin-top:-16px}
-@media(max-width:900px){.kpi-grid{grid-template-columns:repeat(3,1fr)}.bottom-grid{grid-template-columns:1fr}.charts-col{grid-template-columns:1fr 1fr}}
+@media(max-width:900px){.kpi-grid{grid-template-columns:repeat(3,1fr)}.bottom-grid{grid-template-columns:1fr}.charts-col{grid-template-columns:1fr 1fr}.chart-wrap{height:180px}}
 @media(max-width:760px){
 :root{--sidebar-w:0px}
 .sidebar{transform:translateX(-220px);width:220px;transition:transform .25s ease}
@@ -445,6 +446,7 @@ html{scroll-padding-top:var(--header-h)}
 </div>
 
 <div id="dashboard">
+  <div id="dashboard-inner">
   <div class="kpi-grid" id="kpi-grid"></div>
   <div class="perf-card">
     <div class="perf-header">
@@ -469,6 +471,7 @@ html{scroll-padding-top:var(--header-h)}
       <div class="holdings-tabs"><button class="h-tab active" onclick="filterHoldings('all')">All</button><button class="h-tab" onclick="filterHoldings('Stock')">Stocks</button><button class="h-tab" onclick="filterHoldings('ETF')">ETFs</button><button class="h-tab" onclick="filterHoldings('REIT')">REITs</button><button class="h-tab" onclick="filterHoldings('Bond')">Bonds</button><button class="h-tab" onclick="filterHoldings('Cash')">Cash</button></div>
       <div id="holdings-grouped"></div>
     </div>
+  </div>
   </div>
 </div>
 
@@ -633,13 +636,14 @@ html{scroll-padding-top:var(--header-h)}
     <div class="settings-section">
       <div class="settings-section-header"><div class="settings-section-title">Data &amp; Cache</div></div>
 
-      <div class="settings-row"><div class="settings-row-label"><strong>Clear FMP cache</strong><span><span id="fmp-cache-count">0</span> stocks cached.</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearFmpCache()">Clear</button></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>Clear FMP cache</strong><span><span id="fmp-cache-count">0</span> entries cached (TTL 1hr). Clears stock data, Groq scores, and price targets.</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearFmpCache()">Clear</button></div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>Clear stock detail cache</strong><span><span id="detail-cache-count">0</span> stocks cached.</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearDetailCache()">Clear</button></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>API calls this session</strong><span style="font-family:monospace;font-size:12px">Finnhub: <span id="api-call-counter-finnhub" style="color:var(--blue)">0</span> &nbsp;·&nbsp; FMP: <span id="api-call-counter-fmp" style="color:var(--amber)">0</span> &nbsp;·&nbsp; Groq: <span id="api-call-counter-groq" style="color:var(--green)">0</span> &nbsp;<span style="color:var(--text-3)">(limits: Finnhub 60/min, FMP 250/day, Groq by tokens)</span></span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="_apiCalls.finnhub=0;_apiCalls.fmp=0;_apiCalls.groq=0;['finnhub','fmp','groq'].forEach(k=>{const el=document.getElementById('api-call-counter-'+k);if(el)el.textContent='0'});showSettingsToast('Counters reset')">Reset</button></div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>Clear watchlist</strong><span>Permanently removes all stocks from your watchlist.</span></div><div class="settings-row-control"><button class="settings-save-btn danger" onclick="confirmClearWatchlist()">Clear watchlist</button></div></div>
     </div>
     <div class="settings-section">
       <div class="settings-section-header"><div class="settings-section-title">About</div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>All scoring and qualitative analysis is done by <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b-versatile for scoring, llama-3.1-8b-instant for detail pages). Financial data: Finnhub (quotes, profiles, financials, news) + FMP (key metrics, analyst estimates, price targets). All calls via Cloudflare Workers &mdash; no API keys stored in the app.</span></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>Scoring and analysis via <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b for scoring, llama-3.1-8b for detail pages). Financial data split by free tier: <strong style="color:var(--blue)">Finnhub</strong> (quotes, profiles, financials, metrics, news, insider, recommendations, earnings — 60 req/min, no daily cap) + <strong style="color:var(--amber)">FMP</strong> only for data unavailable free on Finnhub: ROIC/EV·EBITDA key-metrics, price targets, forward estimates (250 req/day, cached 24hr). All via Cloudflare Workers — no API keys in the app.</span></div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>Quality scoring</strong><span>Based on Pieter Slegers' <em>Compounding Quality</em>. 13 quantitative criteria (rule-based, 60%) + 7 qualitative factors scored by AI (40%). Final score /100.</span></div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>Privacy</strong><span>All portfolio data stays in your browser. API keys are stored securely in your Cloudflare Workers and never touch the app.</span></div></div>
     </div>
@@ -715,9 +719,31 @@ const _settings = {
   privacyMode:    false,
 };
 
-// ── Caches ────────────────────────────────────────────────────
-const _fmpCache    = {};
+// ── Caches (TTL-aware) ────────────────────────────────────────
+// Each entry: { value, ts }  — ts = Date.now() at store time
+const CACHE_TTL_MS    = 24 * 60 * 60 * 1000; // 24hr default (financials, scores, profiles)
+const CACHE_TTL_LONG  = 24 * 60 * 60 * 1000; // 24hr for stable data
+const CACHE_TTL_PRICE = 60 * 60 * 1000;       // 1hr for live prices
+const _fmpCache         = {};
 const _stockDetailCache = {};
+
+function _cacheSet(store, key, value, ttl = CACHE_TTL_MS) {
+  store[key] = { value, ts: Date.now(), ttl };
+}
+function _cacheGet(store, key) {
+  const e = store[key];
+  if (!e) return null;
+  if (Date.now() - e.ts > e.ttl) { delete store[key]; return null; }
+  return e.value;
+}
+
+// ── API call counters (session, resets on page load) ──────────
+const _apiCalls = { finnhub: 0, fmp: 0, groq: 0 };
+function _trackCall(api) {
+  _apiCalls[api]++;
+  const el = document.getElementById('api-call-counter-' + api);
+  if (el) el.textContent = _apiCalls[api];
+}
 
 // ═══════════════════════════════════════════════════════════════
 // NAVIGATION
@@ -860,7 +886,9 @@ function refreshSettingsUI() {
   // Never pre-fill inputs with masked keys — just update placeholders to show saved status
   // No key inputs — keys live in Cloudflare Workers
   // Cache counts
-  document.getElementById('fmp-cache-count').textContent = Object.keys(_fmpCache).length;
+  // Cache counts (only live entries)
+  const now = Date.now();
+  document.getElementById('fmp-cache-count').textContent = Object.values(_fmpCache).filter(e => e && (now - e.ts) < e.ttl).length;
   document.getElementById('detail-cache-count').textContent = Object.keys(_stockDetailCache).length;
   // Toggles & selects
   const aw = document.getElementById('setting-auto-watchlist');
@@ -1268,15 +1296,22 @@ function renderDashboard() {
   renderGroupedHoldings(rows, total, 'all');
 
   // ── Fetch analyst targets for stock holdings (async, updates table when done)
+  // Uses session cache — only fetches if not already loaded this session
   const _stocksForTargets = rows.filter(r => r.cls === 'Stock' && r._targetLow === undefined);
   if (_stocksForTargets.length) {
     Promise.allSettled(_stocksForTargets.map(async r => {
       try {
+        // Use Finnhub quote for price (free), FMP for price targets
         const ticker = r.ticker || (r.isin ? await fmpGet('/stable/search?query=' + encodeURIComponent(r.product) + '&limit=1').then(d => d?.[0]?.symbol).catch(() => null) : null);
         if (!ticker) { r._targetLow = null; return; }
         r.ticker = ticker;
-        const pt = await fmpGet('/stable/price-target-consensus?symbol=' + ticker).catch(() => null);
-        const t = pt && !Array.isArray(pt) ? pt : (Array.isArray(pt) && pt.length ? pt[0] : null);
+        const ptCacheKey = 'pt:' + ticker.toLowerCase();
+        let t = _cacheGet(_fmpCache, ptCacheKey);
+        if (!t) {
+          const ptRaw = await fmpGet('/stable/price-target-consensus?symbol=' + ticker).catch(() => null);
+          t = ptRaw && !Array.isArray(ptRaw) ? ptRaw : (Array.isArray(ptRaw) && ptRaw.length ? ptRaw[0] : null);
+          if (t) _cacheSet(_fmpCache, ptCacheKey, t, CACHE_TTL_LONG);
+        }
         r._targetLow  = t?.targetLow  ?? null;
         r._targetMean = t?.targetMedian || t?.targetMean || null;
         r._targetHigh = t?.targetHigh  ?? null;
@@ -1580,28 +1615,56 @@ async function testGroqConnection() {
 
 async function testFmpConnection() {
   await runConnectionTest('fmp-test-btn', 'fmp-test-result', async () => {
-    const data = await fmpGet('/stable/profile?symbol=AAPL');
-    if (!Array.isArray(data) || !data[0]?.symbol) throw new Error('No data returned');
-    return 'Connected — ' + data[0].companyName + ' $' + data[0].price;
+    const data = await fmpGet('/stable/key-metrics?symbol=AAPL&period=annual&limit=1');
+    const d = Array.isArray(data) ? data[0] : data;
+    if (!d?.symbol) throw new Error('No data returned');
+    return 'Connected — ROIC: ' + (d.returnOnInvestedCapital != null ? (d.returnOnInvestedCapital * 100).toFixed(1) + '%' : 'n/a');
   });
 }
 
 // ─── Finnhub ──────────────────────────────────────────────────────────────────
-// Routes that go via Finnhub (everything else stays FMP):
-//   /quote                        → live price
-//   /stock/profile2               → company name, exchange, sector, employees, description
-//   /stock/financials             → income statement + cash flow (annual)
-//   /search                       → symbol lookup by name
-//   /stock/symbol                 → all symbols on an exchange
-//   /company-news                 → recent news articles
-//   /stock/metric                 → basic financials (margins, ratios, growth)
-//   /stock/insider-transactions   → insider buy/sell
-//   /stock/insider-sentiment      → aggregated insider sentiment
-//   /stock/financials-reported    → GAAP-as-reported financials
-//   /stock/recommendation         → analyst recommendation trends
-//   /calendar/earnings            → upcoming / recent earnings dates
+// ── API routing strategy ──────────────────────────────────────────────────────
+// Finnhub (free tier: 60 req/min, no daily cap) — used for everything possible:
+//   /quote                        → live price (free ✅)
+//   /stock/profile2               → name, exchange, country, sector, employees, IPO, logo (free ✅)
+//   /stock/financials             → income + cash flow statements, annual (free ✅)
+//   /stock/metric                 → margins, ratios, growth rates (free ✅)
+//   /stock/recommendation         → analyst buy/hold/sell trends (free ✅)
+//   /stock/insider-transactions   → insider buy/sell activity (free ✅)
+//   /company-news                 → recent news articles, US only (free ✅)
+//   /calendar/earnings            → upcoming earnings dates (free ✅)
+//   /search                       → symbol lookup by name (free ✅)
+//
+// FMP (free tier: 250 req/day) — only for data NOT available on Finnhub free:
+//   /stable/key-metrics           → ROIC, EV/EBITDA, FCF yield, net debt/EBITDA (free ✅, no Finnhub equiv)
+//   /stable/price-target-consensus → analyst price targets (free ✅, Finnhub equiv is PREMIUM ❌)
+//   /stable/analyst-estimates     → forward EPS/revenue estimates (free ✅, Finnhub equiv is PREMIUM ❌)
+//   /stable/search-symbol         → fallback ticker resolution (free ✅)
+//
+// All FMP results are cached 24hr to protect the 250/day limit.
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Finnhub rate limiter: 60 req/min free tier ────────────────
+// Token bucket: refills 1 token/sec, max 60 tokens
+const _fhRateLimit = { tokens: 60, lastRefill: Date.now(), maxTokens: 60, refillMs: 1000 };
+async function _fhThrottle() {
+  const now = Date.now();
+  const elapsed = now - _fhRateLimit.lastRefill;
+  const refilled = Math.floor(elapsed / _fhRateLimit.refillMs);
+  if (refilled > 0) {
+    _fhRateLimit.tokens = Math.min(_fhRateLimit.maxTokens, _fhRateLimit.tokens + refilled);
+    _fhRateLimit.lastRefill = now - (elapsed % _fhRateLimit.refillMs);
+  }
+  if (_fhRateLimit.tokens <= 0) {
+    // Wait for next refill
+    await new Promise(r => setTimeout(r, _fhRateLimit.refillMs - (Date.now() - _fhRateLimit.lastRefill) + 50));
+    return _fhThrottle();
+  }
+  _fhRateLimit.tokens--;
+}
+
 async function finnhubGet(path) {
+  await _fhThrottle();
+  _trackCall('finnhub');
   const fullUrl = WORKERS.finnhub + path;
   console.log('[Finnhub] GET', fullUrl);
   let res;
@@ -1684,7 +1747,9 @@ async function scoreStock(name) {
 
   // ── Step 1: Fetch real financial data for quantitative scoring ─────────────
   let realData = null;
-  try { realData = await fetchRealData(name); } catch(e) { console.warn('[scoreStock] fetchRealData failed for', name, ':', e.message); }
+  // lite=true: skips news, insider, earnings, recommendations — not needed for scoring
+  // saves 4 Finnhub + 1 FMP calls per stock vs full mode
+  try { realData = await fetchStockData(name, { lite: true }); } catch(e) { console.warn('[scoreStock] fetchRealData failed for', name, ':', e.message); }
 
   // ── Step 2: Compute quantitative criteria (rule-based) ────────────────────
   const fin  = realData?.financials || {};
@@ -1764,7 +1829,7 @@ async function scoreStock(name) {
       value: fcfConv != null ? fmtPct(fcfConv * 100) : null,
       pass: fcfConv != null ? fcfConv > 0.80 : null,
       nullReason: fcfConv == null
-        ? 'FCF conversion requires both free cash flow and net income — one or both missing from Finnhub cash flow statement'
+        ? 'FCF conversion not available — tried Finnhub cash flow series and FMP key-metrics (freeCashFlowPerShare / netIncomePerShare), neither returned usable data for this ticker'
         : null },
 
     { key:'netMargin',
@@ -1773,7 +1838,7 @@ async function scoreStock(name) {
       value: fmtPct(netMargin),
       pass: netMargin != null ? netMargin > 10 : null,
       nullReason: netMargin == null
-        ? 'Net income margin requires revenue and net income — not found in Finnhub financials for this ticker'
+        ? 'Profit margin not available — tried Finnhub income series, FMP key-metrics (netIncomePerShare / revenuePerShare), and Finnhub netProfitMarginTTM metric; none returned data for this ticker'
         : null },
 
     { key:'roic',
@@ -1804,12 +1869,17 @@ async function scoreStock(name) {
     : null;
 
   // ── Step 3: Qualitative scoring via Groq ──────────────────────────────────
-  const qualPrompt = `You are a quality investing analyst. Score "${name}" on 7 factors for a long-term quality investor following Pieter Slegers' Compounding Quality methodology. Score each 1-5 (integer). One sentence reason each. No extra text.
+  // Cache result for 1 hour — re-scanning same stock won't burn Groq tokens
+  const _groqCacheKey = 'groq:qual:' + name.toLowerCase();
+  let result = _cacheGet(_fmpCache, _groqCacheKey);
+  if (!result) {
+    const qualPrompt = `You are a quality investing analyst. Score "${name}" on 7 factors for a long-term quality investor following Pieter Slegers' Compounding Quality methodology. Score each 1-5 (integer). One sentence reason each. No extra text.
 
 Respond ONLY with this exact JSON structure:
 {"ticker":"TICK","name":"Full Name","qualitative":{"moat":{"score":X,"reason":"..."},"pricing":{"score":X,"reason":"..."},"management":{"score":X,"reason":"..."},"simplicity":{"score":X,"reason":"..."},"tailwinds":{"score":X,"reason":"..."},"recurring":{"score":X,"reason":"..."},"capLight":{"score":X,"reason":"..."}},"reason":"one sentence summary"}`;
-
-  const result = await groqJSON([{ role: 'user', content: qualPrompt }], 'llama-3.3-70b-versatile', 900);
+    result = await groqJSON([{ role: 'user', content: qualPrompt }], 'llama-3.3-70b-versatile', 900);
+    if (result?.qualitative) _cacheSet(_fmpCache, _groqCacheKey, result, CACHE_TTL_LONG);
+  }
   const qual   = result.qualitative || {};
   const qualScores = Object.values(qual).map(f => +(f?.score || 0)).filter(v => v > 0);
   const qualAvg    = qualScores.length ? qualScores.reduce((a,b) => a+b,0) / qualScores.length : 0;
@@ -2132,20 +2202,26 @@ async function refreshWatchlist() {
     if (i >= watchlist.length) return;
     const stock = watchlist[i++];
     try {
-      // Try fiscal.ai price first, then FMP, then Yahoo
+      // Finnhub quote: always fresh (free, unlimited, subject to 1hr price TTL via cache)
+      // FMP price-target: cached 24hr — only call FMP if not in cache (saves daily quota)
       let priceData = null;
-      if (!priceData && stock.ticker) {
-        const [qt, pt] = await Promise.all([
-          fmpGet('/stable/quote?symbol=' + stock.ticker).catch(() => []),
-          fmpGet('/stable/price-target-consensus?symbol=' + stock.ticker).catch(() => []),
+      if (stock.ticker) {
+        const ptCacheKey = 'pt:' + stock.ticker.toLowerCase();
+        let cachedPt = _cacheGet(_fmpCache, ptCacheKey);
+
+        const [fhQt, fmpPt] = await Promise.all([
+          finnhubGet('/quote?symbol=' + stock.ticker).catch(() => null),
+          cachedPt ? Promise.resolve(cachedPt) : fmpGet('/stable/price-target-consensus?symbol=' + stock.ticker).catch(() => null),
         ]);
-        const q = Array.isArray(qt) ? qt[0] : null;
-        const t = Array.isArray(pt) ? pt[0] : (pt || null);
-        if (q?.price) priceData = { price: q.price, currency: q.currency || stock.currency };
-        if (t?.targetLow || t?.targetMean) {
-          stock.targetLow  = t.targetLow  || stock.targetLow;
-          stock.targetMean = t.targetMedian || t.targetMean || stock.targetMean;
-          stock.targetHigh = t.targetHigh || stock.targetHigh;
+
+        if (fhQt?.c) priceData = { price: fhQt.c, currency: stock.currency };
+
+        const rawPt = fmpPt && !Array.isArray(fmpPt) ? fmpPt : (Array.isArray(fmpPt) && fmpPt.length ? fmpPt[0] : null);
+        if (rawPt && !cachedPt) _cacheSet(_fmpCache, ptCacheKey, rawPt, CACHE_TTL_LONG);
+        if (rawPt?.targetLow || rawPt?.targetMean) {
+          stock.targetLow  = rawPt.targetLow  || stock.targetLow;
+          stock.targetMean = rawPt.targetMedian || rawPt.targetMean || stock.targetMean;
+          stock.targetHigh = rawPt.targetHigh || stock.targetHigh;
         }
       }
       if (!priceData && stock.ticker) {
@@ -2174,6 +2250,7 @@ async function refreshWatchlist() {
 // ═══════════════════════════════════════════════════════════════
 async function fmpGet(path) {
   // Worker forwards: https://fmp-proxy.jaripieters.workers.dev/stable/X → https://financialmodelingprep.com/stable/X?apikey=KEY
+  _trackCall('fmp');
   const fullUrl = WORKERS.fmp + path;
   console.log('[FMP] GET', fullUrl);
   let res;
@@ -2196,9 +2273,27 @@ async function fmpGet(path) {
   }
 }
 
-async function fetchStockData(nameOrTicker) {
-  const cacheKey = nameOrTicker.toLowerCase();
-  if (_fmpCache[cacheKey]) return _fmpCache[cacheKey];
+async function fetchStockData(nameOrTicker, opts = {}) {
+  const lite     = opts.lite || false;   // true = skip news/insider/earnings/recommendations
+  const cacheKey = nameOrTicker.toLowerCase() + (lite ? ':lite' : '');
+  const cached   = _cacheGet(_fmpCache, cacheKey);
+  if (cached) {
+    // Refresh price if its own TTL has expired (1hr), without refetching all data
+    const priceEntry = _fmpCache[cacheKey + ':price'];
+    const priceStale = !priceEntry || (Date.now() - priceEntry.ts) > CACHE_TTL_PRICE;
+    if (priceStale && cached.ticker) {
+      try {
+        const fhQ = await finnhubGet('/quote?symbol=' + cached.ticker).catch(() => null);
+        if (fhQ?.c) {
+          const updated = { ...cached, livePrice: fhQ.c };
+          _cacheSet(_fmpCache, cacheKey, updated, CACHE_TTL_MS);
+          _fmpCache[cacheKey + ':price'] = { ts: Date.now() };
+          return updated;
+        }
+      } catch {}
+    }
+    return cached;
+  }
 
   // ── Step 1: resolve ticker ─────────────────────────────────────────────────
   // Finnhub for symbol search; FMP as fallback
@@ -2239,13 +2334,13 @@ async function fetchStockData(nameOrTicker) {
     finnhubGet('/quote?symbol='                   + ticker).catch(() => ({})),
     finnhubGet('/stock/financials?symbol='        + ticker + '&statement=ic&freq=annual').catch(() => null),
     finnhubGet('/stock/metric?symbol='            + ticker + '&metric=all').catch(() => ({})),
-    finnhubGet('/stock/recommendation?symbol='    + ticker).catch(() => []),
-    finnhubGet('/calendar/earnings?symbol='       + ticker).catch(() => ({})),
-    finnhubGet('/stock/insider-transactions?symbol=' + ticker).catch(() => ({})),
-    finnhubGet('/company-news?symbol='            + ticker + '&from=' + _dateStr(-30) + '&to=' + _dateStr(0)).catch(() => []),
+    lite ? Promise.resolve([])   : finnhubGet('/stock/recommendation?symbol='    + ticker).catch(() => []),
+    lite ? Promise.resolve({})   : finnhubGet('/calendar/earnings?symbol='       + ticker).catch(() => ({})),
+    lite ? Promise.resolve({})   : finnhubGet('/stock/insider-transactions?symbol=' + ticker).catch(() => ({})),
+    lite ? Promise.resolve([])   : finnhubGet('/company-news?symbol='            + ticker + '&from=' + _dateStr(-30) + '&to=' + _dateStr(0)).catch(() => []),
     fmpGet('/stable/key-metrics?symbol='          + ticker + '&period=annual&limit=5').catch(() => []),
     fmpGet('/stable/price-target-consensus?symbol=' + ticker).catch(() => null),
-    fmpGet('/stable/analyst-estimates?symbol='    + ticker + '&period=annual&limit=3').catch(() => []),
+    lite ? Promise.resolve([])   : fmpGet('/stable/analyst-estimates?symbol='    + ticker + '&period=annual&limit=3').catch(() => []),
   ]);
 
   // ── Normalise Finnhub profile ──────────────────────────────────────────────
@@ -2352,8 +2447,17 @@ async function fetchStockData(nameOrTicker) {
   const interestCovRaw = opIncome != null && interestExp && interestExp > 0
     ? opIncome / interestExp : null;
 
-  const fcfConvRaw = fcfRawVal != null && netIncomeRaw && netIncomeRaw > 0
-    ? fcfRawVal / netIncomeRaw : null;
+  const fcfConvRaw = (() => {
+    // Primary: Finnhub cashflow series
+    if (fcfRawVal != null && netIncomeRaw != null && netIncomeRaw > 0)
+      return fcfRawVal / netIncomeRaw;
+    // Fallback: FMP key-metrics per-share figures (same ratio, share count cancels out)
+    const fmpFcfPs  = latestKm.freeCashFlowPerShare ?? null;
+    const fmpNiPs   = latestKm.netIncomePerShare    ?? null;
+    if (fmpFcfPs != null && fmpNiPs != null && fmpNiPs > 0)
+      return fmpFcfPs / fmpNiPs;
+    return null;
+  })();
 
   const mktCap = p.marketCapitalization ? p.marketCapitalization * 1e6 : null;
 
@@ -2384,8 +2488,20 @@ async function fetchStockData(nameOrTicker) {
     ? (Math.pow(fwdEpsEst2 / curEps, 1 / 2) - 1) * 100
     : (fwdEpsEst1 && curEps && curEps > 0 ? (fwdEpsEst1 / curEps - 1) * 100 : null);
 
-  const netIncomeMarginRaw = netIncomeRaw != null && rev && rev > 0
-    ? (netIncomeRaw / rev) * 100 : null;
+  const netIncomeMarginRaw = (() => {
+    // Primary: Finnhub income series
+    if (netIncomeRaw != null && rev != null && rev > 0)
+      return (netIncomeRaw / rev) * 100;
+    // Fallback: FMP key-metrics per-share (margin = NI/Rev = NiPS/RevPS)
+    const fmpNiPs  = latestKm.netIncomePerShare  ?? null;
+    const fmpRevPs = latestKm.revenuePerShare     ?? null;
+    if (fmpNiPs != null && fmpRevPs != null && fmpRevPs > 0)
+      return (fmpNiPs / fmpRevPs) * 100;
+    // Second fallback: Finnhub metric netProfitMarginTTM (already a %)
+    const fhMargin = m.netProfitMarginTTM ?? m.netProfitMarginAnnual ?? null;
+    if (fhMargin != null) return fhMargin;
+    return null;
+  })();
 
   // Insider summary
   const insiderTx = Array.isArray(fhInsider?.data) ? fhInsider.data : [];
@@ -2474,8 +2590,8 @@ async function fetchStockData(nameOrTicker) {
     _dataSource: 'finnhub+fmp',
   };
 
-  _fmpCache[cacheKey] = result;
-  if (ticker) _fmpCache[ticker.toLowerCase()] = result;
+  _cacheSet(_fmpCache, cacheKey, result, CACHE_TTL_LONG);
+  if (ticker) _cacheSet(_fmpCache, ticker.toLowerCase() + (lite ? ':lite' : ''), result, CACHE_TTL_LONG);
   return result;
 }
 
@@ -2523,15 +2639,14 @@ async function runScreener() {
     progressBar.style.width = ((i / total) * 100) + '%';
 
     try {
-      const [data, ptRaw] = await Promise.all([
-        fetchFMPData(ticker),
-        fmpGet('/stable/price-target-consensus?symbol=' + ticker).catch(() => null),
-      ]);
+      // Screener uses lite mode: skips news/insider/earnings/recommendations (saves 4 Finnhub + 1 FMP calls per ticker)
+      // Price target is already fetched inside fetchStockData
+      const data = await fetchStockData(ticker, { lite: true });
       const fin  = data?.financials || {};
-      const pt   = ptRaw && !Array.isArray(ptRaw) ? ptRaw : (Array.isArray(ptRaw) && ptRaw.length ? ptRaw[0] : null);
-      const targetLow  = pt?.targetLow  || null;
-      const targetMean = pt?.targetMedian || pt?.targetMean || null;
-      const targetHigh = pt?.targetHigh || null;
+      const pt   = data?.analystTargets || null;
+      const targetLow  = pt?.low  || null;
+      const targetMean = pt?.mean || null;
+      const targetHigh = pt?.high || null;
       const pct  = v => { if (v == null) return null; if (typeof v === 'number') return isNaN(v) ? null : v; const n = parseFloat(String(v).replace(/%/g,'')); return isNaN(n) ? null : n; };
 
       const roic          = pct(fin.roic);
@@ -2568,7 +2683,7 @@ async function runScreener() {
           netDebt,
         },
         targetLow, targetMean, targetHigh,
-        currentPrice: data.currentPrice || null,
+        currentPrice: data.livePrice || null,
         currency: data.currency || null,
       };
 
@@ -2580,8 +2695,8 @@ async function runScreener() {
     }
 
     renderScreenerResults(passed, failed, i + 1, total);
-    // Small delay to avoid rate limiting
-    await new Promise(r => setTimeout(r, 300));
+    // 500ms delay between tickers: screener uses 3 FMP calls each → protects 250/day limit
+    await new Promise(r => setTimeout(r, 500));
   }
 
   progressBar.style.width = '100%';
@@ -2928,7 +3043,12 @@ Respond ONLY with valid JSON (no markdown):
   "recentNews": [{"headline":"...","sentiment":"positive|neutral|negative","date":"approx date"},{"headline":"...","sentiment":"...","date":"..."},{"headline":"...","sentiment":"...","date":"..."}],
   "qualityScores": ${qualBlock}
 }`;
-  return await groqJSON([{ role: 'user', content: prompt }], 'llama-3.1-8b-instant', 1200);
+  const _detailCacheKey = 'groq:detail:' + name.toLowerCase();
+  const _cached = _cacheGet(_fmpCache, _detailCacheKey);
+  if (_cached) return _cached;
+  const aiResult = await groqJSON([{ role: 'user', content: prompt }], 'llama-3.1-8b-instant', 1200);
+  if (aiResult?.bullCase || aiResult?.description) _cacheSet(_fmpCache, _detailCacheKey, aiResult, CACHE_TTL_LONG);
+  return aiResult;
 }
 
 function buildStockDetailData(name, scanData, realData, aiData, realError) {
