@@ -61,6 +61,21 @@ html{overflow-x:hidden;max-width:100vw}body{display:flex;flex-direction:column;o
 .upload-drop-btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;background:var(--blue);color:#fff;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;position:relative;overflow:hidden;margin-top:4px}
 .upload-drop-btn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
 .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
+.alloc-table-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+.alloc-table-title{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px}
+.alloc-table{width:100%;border-collapse:collapse;font-size:12px}
+.alloc-table th{font-size:10px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;padding:4px 10px;text-align:right;border-bottom:1px solid var(--border)}
+.alloc-table th:first-child{text-align:left}
+.alloc-table td{padding:7px 10px;text-align:right;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text-2)}
+.alloc-table td:first-child{text-align:left;font-weight:500;color:var(--text)}
+.alloc-table tr:last-child td{border-bottom:none}
+.alloc-table .alloc-val{font-variant-numeric:tabular-nums;font-weight:600;color:var(--text)}
+.alloc-diff-bar{display:inline-flex;align-items:center;gap:6px;justify-content:flex-end}
+.alloc-diff-pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;min-width:52px;text-align:center}
+.alloc-best{background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.25)}
+.alloc-worst{background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.25)}
+.alloc-mid{background:rgba(255,255,255,.05);color:var(--text-3);border:1px solid var(--border)}
+.alloc-icon{font-size:13px;margin-right:6px}
 .kpi-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative}
 .kpi-card-link{cursor:pointer;transition:border-color .15s,background .15s}
 .kpi-card-link:hover{border-color:var(--blue);background:var(--card-hover)}
@@ -452,6 +467,7 @@ html{scroll-padding-top:var(--header-h)}
 <div id="dashboard">
   <div id="dashboard-inner">
   <div class="kpi-grid" id="kpi-grid"></div>
+  <div id="alloc-table-wrap" style="display:none;margin-bottom:16px"></div>
   <div class="perf-card">
     <div class="perf-header">
       <div><div class="perf-title">Portfolio Performance</div><div class="perf-subtitle">% return vs MSCI World benchmark</div></div>
@@ -1220,6 +1236,97 @@ function geoGroupBy(rows) {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD RENDERING
 // ═══════════════════════════════════════════════════════════════
+// ── Allocation target table ──────────────────────────────────────────────────
+const ALLOC_TARGETS = [
+  { key:'Stocks',           icon:'📈', target:45, label:'Stocks'           },
+  { key:'Emerging Markets', icon:'🌏', target:5,  label:'Emerging Markets' },
+  { key:'Bonds',            icon:'📄', target:15, label:'Bonds'            },
+  { key:'REITs',            icon:'🏢', target:15, label:'REITs'            },
+  { key:'Other',            icon:'🌍', target:20, label:'Other / Cash'     },
+];
+
+function getAllocBuckets(rows) {
+  const buckets = { Stocks:0, 'Emerging Markets':0, Bonds:0, REITs:0, Other:0 };
+  rows.forEach(r => {
+    const cls = r.cls || '';
+    const v   = r.valueEUR || 0;
+    // Bonds
+    if (cls === 'Bond' || cls === 'ETF/Bond') { buckets.Bonds += v; return; }
+    // REITs
+    if (cls === 'REIT' || cls === 'ETF/REIT') { buckets.REITs += v; return; }
+    // Cash
+    if (cls === 'Cash') { buckets.Other += v; return; }
+    // Stocks and ETFs: classify by region
+    const reg = getRegion(r);
+    if (reg === 'EM') { buckets['Emerging Markets'] += v; return; }
+    if (cls === 'Stock') {
+      if (reg === 'US' || reg === 'Europe') { buckets.Stocks += v; return; }
+      buckets.Other += v; return;
+    }
+    // ETFs not classified as EM
+    if (cls === 'ETF' || cls.startsWith('ETF')) {
+      if (reg === 'US' || reg === 'Europe') { buckets.Stocks += v; return; }
+      buckets.Other += v; return;
+    }
+    buckets.Other += v;
+  });
+  return buckets;
+}
+
+function renderAllocTable(rows, total) {
+  const wrap = document.getElementById('alloc-table-wrap');
+  if (!wrap || total <= 0) return;
+  const sym     = _settings.currency === 'USD' ? '$' : '€';
+  const buckets = getAllocBuckets(rows);
+
+  // Compute diffs: actual% - target% (positive = overweight, negative = underweight)
+  const tableData = ALLOC_TARGETS.map(t => {
+    const val    = buckets[t.key] || 0;
+    const actual = total > 0 ? val / total * 100 : 0;
+    const diff   = actual - t.target;
+    return { ...t, val, actual, diff };
+  });
+
+  // Find most overweight (highest diff) and most underweight (lowest diff)
+  const diffs   = tableData.map(d => d.diff);
+  const maxDiff = Math.max(...diffs);
+  const minDiff = Math.min(...diffs);
+
+  const rows_html = tableData.map(d => {
+    const isWorst = d.diff === maxDiff;  // most overweight → sell signal
+    const isBest  = d.diff === minDiff;  // most underweight → buy signal
+    const diffLabel = (d.diff >= 0 ? '+' : '') + d.diff.toFixed(1) + '%';
+    const pillCls   = isBest ? 'alloc-best' : isWorst ? 'alloc-worst' : 'alloc-mid';
+    const hint      = isBest ? ' 🛒' : isWorst ? ' 📤' : '';
+    return `<tr>
+      <td><span class="alloc-icon">${d.icon}</span>${d.label}</td>
+      <td class="alloc-val private">${sym}${Math.round(d.val).toLocaleString('en')}</td>
+      <td class="alloc-val">${d.actual.toFixed(1)}%</td>
+      <td style="color:var(--text-3)">${d.target}%</td>
+      <td><div class="alloc-diff-bar"><span class="alloc-diff-pill ${pillCls}">${diffLabel}${hint}</span></div></td>
+    </tr>`;
+  }).join('');
+
+  wrap.style.display = '';
+  wrap.innerHTML = `<div class="alloc-table-card">
+    <div class="alloc-table-title">Allocation vs Target</div>
+    <table class="alloc-table">
+      <thead><tr>
+        <th style="text-align:left">Class</th>
+        <th>Value</th>
+        <th>Actual</th>
+        <th>Target</th>
+        <th>Difference</th>
+      </tr></thead>
+      <tbody>${rows_html}</tbody>
+    </table>
+    <div style="margin-top:10px;font-size:10px;color:var(--text-3);display:flex;gap:16px">
+      <span>🛒 Most underweight — consider buying</span>
+      <span>📤 Most overweight — consider trimming</span>
+    </div>
+  </div>`;
+}
+
 function renderDashboard() {
   if (!portfolioRows) return;
   const rows = portfolioRows;
@@ -1255,6 +1362,8 @@ function renderDashboard() {
     { label: 'ETFs & REITs',   value: sym + Math.round(etfs + reits).toLocaleString('en'),                        sub: total > 0 ? ((etfs+reits)/total*100).toFixed(1) + '% of portfolio' : '—', cls: '' },
     { label: 'Cash',           value: cash > 0 ? sym + Math.round(cash).toLocaleString('en') : '—',                    sub: total > 0 && cash > 0 ? (cash/total*100).toFixed(1) + '% of portfolio' : 'No cash position', cls: '' },
   ].map(({ label, value, sub, cls, click }) => `<div class="kpi-card${click ? ' kpi-card-link' : ''}"${click ? ` onclick="${click}"` : ''}><div class="kpi-label">${label}</div><div class="kpi-value ${cls} private">${value}</div><div class="kpi-sub private">${sub}</div>${click ? '<div class="kpi-arrow">→</div>' : ''}</div>`).join('');
+
+  renderAllocTable(rows, total);
 
   if (txRows && txRows.length) {
     allPerfData = buildPerfData(txRows, total);
