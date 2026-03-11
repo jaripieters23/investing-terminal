@@ -1095,8 +1095,11 @@ function parseTx(rows) {
 function classifyHolding(name, isin) {
   const n = name.toUpperCase();
   if (n.includes('CASH') || n.startsWith('EUR') || n.startsWith('USD') || n.startsWith('GBP') || isin.startsWith('XX')) return 'Cash';
-  if (n.includes('REIT') || n.includes('VASTGOED') || n.includes('REAL ESTATE')) {
-    if (n.includes('ETF') || n.includes('INDEX') || n.includes('FUND')) return 'ETF/REIT';
+  if (n.includes('REIT') || n.includes('VASTGOED') || n.includes('REAL ESTATE')
+    || n.includes('WDP') || n.includes('AEDIFICA') || n.includes('VICI') || n.includes('PUBLIC STORAGE') || n.includes('SHURGARD')
+    || n.includes('PROPERTY YIELD') || n.includes('UNIBAIL') || n.includes('KLEPIERRE') || n.includes('VONOVIA')
+  ) {
+    if (n.includes('ETF') || n.includes('INDEX') || n.includes('FUND') || n.includes('UCITS') || n.includes('YIELD')) return 'ETF/REIT';
     return 'REIT';
   }
   if (n.includes('BOND') || n.includes('OBLIGATIE') || n.includes('GILT') || n.includes('TREASURY') || n.includes('CORPORATE') || n.includes('AGGREGATE') || n.includes('SOVEREIGN') || n.includes('CREDIT') || n.includes('HIGH YIELD') || n.includes('INFLATION')) {
