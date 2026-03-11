@@ -160,15 +160,8 @@ td{padding:8px 16px;vertical-align:middle}
 .scan-btn:disabled{opacity:.4;cursor:not-allowed}
 .scan-btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text-2);font-weight:400}
 .scan-btn.secondary:hover{border-color:var(--text-3);opacity:1}
-.scan-presets-section{margin:14px 24px 0;display:flex;flex-direction:column;gap:10px}
-.scan-preset-label{font-size:10px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em}
-.scan-presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
-.index-select-mobile{display:none;margin-top:4px}
-.index-select-mobile select{width:100%}
 .preset-btn{padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text-3);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
 .preset-btn:hover{color:var(--text-2);border-color:var(--text-3);background:var(--card-hover)}
-.index-btn{border-color:rgba(79,124,247,.3);color:var(--blue)}
-.index-btn:hover{background:rgba(79,124,247,.08);border-color:var(--blue)}
 #scan-queue{display:flex;flex-wrap:wrap;gap:6px;margin:12px 24px 0;min-height:28px}
 .scan-chip{display:flex;align-items:center;gap:5px;padding:3px 8px 3px 10px;background:rgba(79,124,247,.1);border:1px solid rgba(79,124,247,.25);border-radius:20px;font-size:11px;color:var(--blue)}
 .scan-chip-del{cursor:pointer;color:var(--text-3);font-size:13px;line-height:1}
@@ -250,6 +243,17 @@ td{padding:8px 16px;vertical-align:middle}
 .news-item{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
 .news-item:last-child{border-bottom:none;padding-bottom:0}
 .news-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.manual-entry-btn{font-size:10px;color:var(--blue);background:none;border:none;cursor:pointer;padding:1px 4px;border-radius:3px;opacity:.7;transition:opacity .15s}
+.manual-entry-btn:hover{opacity:1;background:rgba(79,124,247,.1)}
+.manual-entry-wrap{display:flex;align-items:center;gap:6px;margin-top:5px;padding:7px 10px;background:rgba(79,124,247,.06);border:1px solid rgba(79,124,247,.2);border-radius:7px;flex-wrap:wrap}
+.manual-entry-input{background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;padding:3px 7px;width:80px;font-family:'Inter',sans-serif}
+.manual-entry-input:focus{outline:none;border-color:var(--blue)}
+.manual-entry-label{font-size:10px;color:var(--text-3)}
+.manual-entry-save{font-size:10px;padding:3px 10px;background:var(--blue);color:#fff;border:none;border-radius:5px;cursor:pointer}
+.manual-entry-save:hover{opacity:.85}
+.manual-entry-clear{font-size:10px;padding:3px 8px;background:transparent;color:var(--text-3);border:1px solid var(--border);border-radius:5px;cursor:pointer}
+.manual-entry-clear:hover{color:var(--red);border-color:var(--red)}
+.manual-badge{font-size:9px;color:var(--blue);background:rgba(79,124,247,.12);border:1px solid rgba(79,124,247,.2);border-radius:3px;padding:1px 4px;margin-left:4px}
 .news-headline{font-size:12px;color:var(--text-2);line-height:1.5;flex:1}
 .news-date{font-size:10px;color:var(--text-3);margin-top:2px}
 .risk-tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,.08);color:#f87171;border:1px solid rgba(239,68,68,.15);margin:3px 3px 0 0}
@@ -265,12 +269,6 @@ td{padding:8px 16px;vertical-align:middle}
 .modal-close:hover{color:var(--text)}
 .modal-body{overflow-y:auto;padding:14px 20px;flex:1}
 .modal-footer{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
-.idx-cand{display:flex;align-items:center;gap:12px;padding:8px;border-radius:8px;cursor:pointer;transition:background .12s}
-.idx-cand:hover{background:var(--card-hover)}
-.idx-cand input[type=checkbox]{flex-shrink:0;accent-color:var(--blue);width:14px;height:14px}
-.idx-cand-name{font-size:12px;font-weight:500;flex:1}
-.idx-cand-score{font-size:11px;font-weight:700}
-.idx-cand-verdict{font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}
 .settings-body{max-width:680px;margin:0 auto;padding:28px 24px 80px}
 .settings-section{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;overflow:hidden}
 .settings-section-header{padding:16px 20px 14px;border-bottom:1px solid var(--border)}
@@ -353,7 +351,7 @@ html{scroll-padding-top:var(--header-h)}
 #scan-page,#screener-page,#watchlist-page,#settings-page,#pnl-page{padding-top:calc(var(--header-h) + 8px);padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}
   #upload-screen{padding-bottom:calc(80px + env(safe-area-inset-bottom,0px))}
 .scan-header{padding:8px 14px 0}.scan-controls{margin:12px 14px 0;grid-template-columns:1fr auto}.scan-btn.secondary{grid-column:1/-1}
-#scan-queue{margin:10px 14px 0}.scan-presets-section{margin:12px 14px 0}#scan-results{padding:12px 14px 80px}.index-btns-desktop{display:none!important}.index-select-mobile{display:block!important}
+#scan-queue{margin:10px 14px 0}#scan-results{padding:12px 14px 80px}
 .watchlist-header{padding:8px 14px 0}.wl-table-wrap{margin:12px 14px 80px}
 .stock-detail-topbar{padding:0 12px}.stock-detail-body{padding:14px}
 .stock-detail-grid{grid-template-columns:1fr}.stock-detail-card.full{grid-column:1}
@@ -483,47 +481,7 @@ html{scroll-padding-top:var(--header-h)}
     <button class="scan-btn" id="scan-run-btn" onclick="runScan()" disabled>Scan &#9654;</button>
   </div>
   <div id="scan-queue"></div>
-  <div class="scan-presets-section">
-    <div class="scan-presets-group">
-      <div class="scan-preset-label">Index scan:</div>
-      <!-- Desktop: buttons row -->
-      <div class="scan-presets index-btns-desktop">
-        <button class="preset-btn index-btn" onclick="openIndexScan('SP500')">&#127482;&#127480; S&amp;P 500</button>
-        <button class="preset-btn index-btn" onclick="openIndexScan('NASDAQ100')">&#128187; Nasdaq 100</button>
-        <button class="preset-btn index-btn" onclick="openIndexScan('AEX')">&#127475;&#127473; AEX</button>
-        <button class="preset-btn index-btn" onclick="openIndexScan('BEL20')">&#127463;&#127466; BEL 20</button>
-        <button class="preset-btn index-btn" onclick="openIndexScan('DAX')">&#127465;&#127466; DAX</button>
-        <button class="preset-btn index-btn" onclick="openIndexScan('CAC40')">&#127467;&#127479; CAC 40</button>
-        <button class="preset-btn index-btn" onclick="openIndexScan('FTSE100')">&#127468;&#127463; FTSE 100</button>
-        <button class="preset-btn index-btn" onclick="openIndexScan('STOXX50')">&#127466;&#127482; Euro Stoxx 50</button>
-      </div>
-      <!-- Mobile: dropdown -->
-      <div class="index-select-mobile">
-        <select class="settings-select" id="index-select-mobile" onchange="if(this.value){openIndexScan(this.value);this.value=''}">
-          <option value="">Select an index&#8230;</option>
-          <option value="SP500">&#127482;&#127480; S&amp;P 500</option>
-          <option value="NASDAQ100">&#128187; Nasdaq 100</option>
-          <option value="AEX">&#127475;&#127473; AEX</option>
-          <option value="BEL20">&#127463;&#127466; BEL 20</option>
-          <option value="DAX">&#127465;&#127466; DAX</option>
-          <option value="CAC40">&#127467;&#127479; CAC 40</option>
-          <option value="FTSE100">&#127468;&#127463; FTSE 100</option>
-          <option value="STOXX50">&#127466;&#127482; Euro Stoxx 50</option>
-        </select>
-      </div>
-    </div>
-  </div>
   <div id="scan-results"></div>
-</div>
-
-<div class="modal-backdrop" id="index-modal-backdrop" onclick="closeIndexModal()"></div>
-<div class="modal" id="index-modal">
-  <div class="modal-header"><div><div class="modal-title" id="index-modal-title">Scanning&#8230;</div><div class="modal-sub" id="index-modal-sub">Finding quality candidates&#8230;</div></div><button class="modal-close" onclick="closeIndexModal()">&#x2715;</button></div>
-  <div id="index-modal-body" class="modal-body"></div>
-  <div class="modal-footer" id="index-modal-footer" style="display:none">
-    <button class="scan-btn secondary" onclick="closeIndexModal()">Cancel</button>
-    <button class="scan-btn" id="index-add-btn" onclick="addIndexCandidatesToQueue()">Add to scan queue &#9654;</button>
-  </div>
 </div>
 
 <div id="screener-page">
@@ -700,12 +658,15 @@ let allPerfData = null;
 let activePeriod = 'ALL';
 let perfChartInst = null;
 let watchlist = JSON.parse(localStorage.getItem('watchlist') || '[]');
+
+// Manual quant overrides: { "Company Name": { revGrowth: {hist:12,fwd:8}, epsGrowth: {hist:15,fwd:10}, fcfConv: 92, netMargin: 18, roic: 22, netDebtEbitda: 1.5 } }
+let _manualOverrides = JSON.parse(localStorage.getItem('manualOverrides') || '{}');
+function saveManualOverrides() { try { localStorage.setItem('manualOverrides', JSON.stringify(_manualOverrides)); } catch {} }
 let wlSortKey = 'score';
 let wlSortDir = -1;
 let scanQueue = [];
 let scanResults = [];
 let _prevPage = 'dashboard';
-let _indexScanAborted = false;
 
 // ── API Keys removed — calls go via Cloudflare Workers ──────
 
@@ -2037,74 +1998,7 @@ function renderScanResults() {
 // ═══════════════════════════════════════════════════════════════
 // INDEX SCAN
 // ═══════════════════════════════════════════════════════════════
-let _indexCandidates = [];
 
-function openIndexScan(indexKey) {
-  const stocks = INDEXES[indexKey];
-  if (!stocks) return;
-  // No key check needed — Groq worker handles auth
-  _indexScanAborted = false;
-  _indexCandidates = [];
-  const modal  = document.getElementById('index-modal');
-  const backdrop = document.getElementById('index-modal-backdrop');
-  modal.classList.add('open'); backdrop.classList.add('open');
-  document.getElementById('index-modal-title').textContent = 'Scanning ' + indexKey.replace('100','') + (indexKey === 'NASDAQ100' ? ' 100' : '');
-  document.getElementById('index-modal-sub').textContent = '0 / ' + stocks.length + ' stocks scored…';
-  document.getElementById('index-modal-body').innerHTML = '';
-  document.getElementById('index-modal-footer').style.display = 'none';
-  runIndexScan(stocks, indexKey);
-}
-
-async function runIndexScan(stocks, indexKey) {
-  let done = 0;
-  const concurrency = _settings.concurrency || 3;
-  let i = 0;
-  async function next() {
-    if (i >= stocks.length || _indexScanAborted) return;
-    const name = stocks[i++];
-    try {
-      const result = await scoreStock(name);
-      if (!_indexScanAborted) {
-        _indexCandidates.push(result);
-        _indexCandidates.sort((a,b) => b.totalScore - a.totalScore);
-      }
-    } catch {}
-    done++;
-    if (!_indexScanAborted) {
-      document.getElementById('index-modal-sub').textContent = done + ' / ' + stocks.length + ' stocks scored…';
-      renderIndexModalBody();
-    }
-    await next();
-  }
-  const workers = Array.from({ length: Math.min(concurrency, stocks.length) }, () => next());
-  await Promise.all(workers);
-  if (!_indexScanAborted) {
-    document.getElementById('index-modal-sub').textContent = 'Done! Showing top candidates (score ≥ 6.5).';
-    document.getElementById('index-modal-footer').style.display = 'flex';
-  }
-}
-
-function renderIndexModalBody() {
-  const top = _indexCandidates.filter(c => c.totalScore >= 6.5).slice(0, 20);
-  const body = document.getElementById('index-modal-body');
-  if (!top.length) { body.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">Scanning… results will appear here.</div>'; return; }
-  const verdictCls = v => v === 'BUY' ? 'wl-buy' : v === 'WATCH' ? 'wl-watch' : 'wl-pass';
-  body.innerHTML = top.map(c => `<label class="idx-cand"><input type="checkbox" class="idx-chk" value="${c.name}" checked><div class="idx-cand-name">${c.name}</div><span class="idx-cand-score" style="color:${c.totalScore>=7.5?'var(--green)':c.totalScore>=5.5?'var(--amber)':'var(--red)'}">${c.totalScore.toFixed(1)}</span><span class="idx-cand-verdict ${verdictCls(c.verdict)}">${c.verdict}</span></label>`).join('');
-}
-
-function addIndexCandidatesToQueue() {
-  const checked = Array.from(document.querySelectorAll('.idx-chk:checked')).map(el => el.value);
-  scanQueue = [...new Set([...scanQueue, ...checked])].slice(0, 30);
-  renderQueue();
-  closeIndexModal();
-  showPage('scan');
-}
-
-function closeIndexModal() {
-  _indexScanAborted = true;
-  document.getElementById('index-modal').classList.remove('open');
-  document.getElementById('index-modal-backdrop').classList.remove('open');
-}
 
 // ═══════════════════════════════════════════════════════════════
 // WATCHLIST
@@ -3051,6 +2945,148 @@ Respond ONLY with valid JSON (no markdown):
   return aiResult;
 }
 
+// ── Manual quant overrides ────────────────────────────────────────────────────
+// Criteria config for validation and display
+const QUANT_CRITERIA_CONFIG = {
+  revGrowth:    { type:'dual', labels:['5Y CAGR (%)', 'Fwd (%)'],     keys:['hist','fwd'],    thresholds:[9,7],    unit:'%'  },
+  epsGrowth:    { type:'dual', labels:['5Y CAGR (%)', 'Fwd 2Y (%)'],  keys:['hist','fwd'],    thresholds:[12,9],   unit:'%'  },
+  fcfConv:      { type:'single', label:'FCF / Net Income (%)',         threshold:80,            unit:'%'  },
+  netMargin:    { type:'single', label:'Net Profit Margin (%)',        threshold:10,            unit:'%'  },
+  roic:         { type:'single', label:'ROIC (%)',                     threshold:15,            unit:'%'  },
+  netDebtEbitda:{ type:'single', label:'Net Debt / EBITDA (x)',        threshold:3,             unit:'x', lowerIsBetter:true },
+};
+
+function applyManualOverrides(name, quantCriteria) {
+  if (!quantCriteria) return quantCriteria;
+  const overrides = _manualOverrides[name.toLowerCase()];
+  if (!overrides) return quantCriteria;
+  return quantCriteria.map(q => {
+    const ov = overrides[q.key];
+    if (ov == null) return q;
+    const cfg = QUANT_CRITERIA_CONFIG[q.key];
+    if (!cfg) return q;
+    let pass, value;
+    if (cfg.type === 'dual') {
+      const hist = ov.hist ?? null;
+      const fwd  = ov.fwd  ?? null;
+      const hPass = hist != null ? hist > cfg.thresholds[0] : null;
+      const fPass = fwd  != null ? fwd  > cfg.thresholds[1] : null;
+      pass  = hPass !== null && fPass !== null ? (hPass && fPass) : hPass !== null ? hPass : fPass;
+      value = [hist != null ? hist.toFixed(1)+'% (5Y)' : null, fwd != null ? fwd.toFixed(1)+'% (fwd)' : null].filter(Boolean).join(' · ');
+    } else {
+      const v = +ov;
+      pass  = cfg.lowerIsBetter ? v < cfg.threshold : v > cfg.threshold;
+      value = v.toFixed(1) + cfg.unit;
+    }
+    return { ...q, pass, value, _manual: true, nullReason: null };
+  });
+}
+
+function recalcQuantScore(quantCriteria) {
+  if (!quantCriteria) return { quantScore: null, quantMissing: 0 };
+  const withData  = quantCriteria.filter(q => q.pass !== null);
+  const points    = withData.filter(q => q.pass).length;
+  const missing   = quantCriteria.length - withData.length;
+  const quantScore = withData.length > 0 ? Math.round((points / withData.length) * 100) : null;
+  return { quantScore, quantMissing: missing };
+}
+
+function saveManualCriterion(name, key, value) {
+  const k = name.toLowerCase();
+  if (!_manualOverrides[k]) _manualOverrides[k] = {};
+  _manualOverrides[k][key] = value;
+  saveManualOverrides();
+}
+
+function clearManualCriterion(name, key) {
+  const k = name.toLowerCase();
+  if (_manualOverrides[k]) {
+    delete _manualOverrides[k][key];
+    if (!Object.keys(_manualOverrides[k]).length) delete _manualOverrides[k];
+  }
+  saveManualOverrides();
+}
+
+function openManualEntry(name, key, containerId) {
+  const cfg = QUANT_CRITERIA_CONFIG[key];
+  if (!cfg) return;
+  const existing = (_manualOverrides[name.toLowerCase()] || {})[key];
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  let html = '<div class="manual-entry-wrap">';
+  if (cfg.type === 'dual') {
+    cfg.keys.forEach((k, i) => {
+      const val = existing?.[k] ?? '';
+      html += '<span class="manual-entry-label">' + cfg.labels[i] + '</span>';
+      html += '<input class="manual-entry-input" id="mentry-' + key + '-' + k + '" type="number" step="0.1" placeholder="e.g. ' + cfg.thresholds[i] + '" value="' + val + '">';
+    });
+  } else {
+    html += '<span class="manual-entry-label">' + cfg.label + '</span>';
+    const val = existing ?? '';
+    html += '<input class="manual-entry-input" id="mentry-' + key + '" type="number" step="0.1" placeholder="e.g. ' + cfg.threshold + '" value="' + val + '">';
+  }
+  html += '<button class="manual-entry-save" onclick="submitManualEntry(' + JSON.stringify(name) + ',' + JSON.stringify(key) + ')">Save</button>';
+  if (existing != null) html += '<button class="manual-entry-clear" onclick="clearManualEntry(' + JSON.stringify(name) + ',' + JSON.stringify(key) + ')">Clear</button>';
+  html += '</div>';
+  container.innerHTML = html;
+  // Focus first input
+  setTimeout(() => { const el = container.querySelector('input'); if (el) el.focus(); }, 30);
+}
+
+function submitManualEntry(name, key) {
+  const cfg = QUANT_CRITERIA_CONFIG[key];
+  let value;
+  if (cfg.type === 'dual') {
+    value = {};
+    cfg.keys.forEach(k => {
+      const el = document.getElementById('mentry-' + key + '-' + k);
+      if (el && el.value !== '') value[k] = parseFloat(el.value);
+    });
+    if (!Object.keys(value).length) return;
+  } else {
+    const el = document.getElementById('mentry-' + key);
+    if (!el || el.value === '') return;
+    value = parseFloat(el.value);
+  }
+  saveManualCriterion(name, key, value);
+  // Refresh detail page if open
+  const cached = _stockDetailCache[name.toLowerCase()];
+  if (cached) {
+    const updated = { ...cached };
+    updated.quantCriteria = applyManualOverrides(name, cached.quantCriteria);
+    const { quantScore, quantMissing } = recalcQuantScore(updated.quantCriteria);
+    updated.quantScore   = quantScore;
+    updated.quantMissing = quantMissing;
+    if (updated.qualScore != null && quantScore != null) {
+      updated.finalScore = Math.round(quantScore * 0.6 + updated.qualScore * 0.4);
+    }
+    _stockDetailCache[name.toLowerCase()] = updated;
+    renderStockDetail(updated);
+  }
+}
+
+function clearManualEntry(name, key) {
+  clearManualCriterion(name, key);
+  const cached = _stockDetailCache[name.toLowerCase()];
+  if (cached) {
+    // Re-apply remaining overrides
+    const original = { ...cached };
+    // We need to restore original null — simplest is to re-fetch, but for UX just mark as null
+    const q = original.quantCriteria?.find(c => c.key === key);
+    if (q) {
+      original.quantCriteria = original.quantCriteria.map(c =>
+        c.key === key ? { ...c, pass: null, value: null, _manual: false, nullReason: c._origNullReason || 'Data unavailable — was manually cleared' } : c
+      );
+      const { quantScore, quantMissing } = recalcQuantScore(original.quantCriteria);
+      original.quantScore   = quantScore;
+      original.quantMissing = quantMissing;
+      _stockDetailCache[name.toLowerCase()] = original;
+      renderStockDetail(original);
+    }
+  }
+}
+
 function buildStockDetailData(name, scanData, realData, aiData, realError) {
   return {
     name:             realData?.name             || name,
@@ -3084,9 +3120,25 @@ function buildStockDetailData(name, scanData, realData, aiData, realError) {
       capLight: aiData.qualityScores.capLight?.score || 0,
       _reasons: Object.fromEntries(Object.entries(aiData.qualityScores).map(([k,v]) => [k, v?.reason || ''])),
     } : null),
-    quantCriteria: scanData?.quantCriteria || null,
-    quantScore:    scanData?.quantScore    || null,
-    quantMissing:  scanData?.quantMissing  ?? 0,
+    quantCriteria: (() => {
+      const base = scanData?.quantCriteria || null;
+      if (!base) return null;
+      // Store original nullReasons before applying overrides
+      const withOrigReasons = base.map(q => ({ ...q, _origNullReason: q.nullReason }));
+      return applyManualOverrides(name, withOrigReasons);
+    })(),
+    quantScore: (() => {
+      const base = scanData?.quantCriteria || null;
+      if (!base) return scanData?.quantScore || null;
+      const patched = applyManualOverrides(name, base);
+      return recalcQuantScore(patched).quantScore ?? scanData?.quantScore ?? null;
+    })(),
+    quantMissing: (() => {
+      const base = scanData?.quantCriteria || null;
+      if (!base) return scanData?.quantMissing ?? 0;
+      const patched = applyManualOverrides(name, base);
+      return recalcQuantScore(patched).quantMissing;
+    })(),
     qualScore:     scanData?.qualScore     || null,
     finalScore:    scanData?.finalScore    || null,
     totalScore:    scanData?.totalScore    || null,
@@ -3180,27 +3232,48 @@ function renderStockDetail(d) {
     { key:'capLight',   label:'Capital-Light Model', icon:'🏭' },
   ];
 
-  const quantHTML = d.quantCriteria?.length ? `
-    <div class="stock-detail-card full">
-      <div class="stock-card-title">Quantitative Criteria</div>
-      <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
-        ${d.quantCriteria.map(q => {
-          const icon = q.pass === true ? '✓' : q.pass === false ? '✗' : '—';
-          const col  = q.pass === true ? 'var(--green)' : q.pass === false ? 'var(--red)' : 'var(--text-3)';
-          const val  = q.value ? `<span style="font-size:10px;color:var(--text-3);margin-right:6px">${q.value}</span>` : '';
-          const nullRow = q.pass === null && q.nullReason
-            ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;padding-left:26px;line-height:1.5;padding-bottom:4px;border-bottom:1px solid rgba(245,158,11,.1)">⚠ ${q.nullReason}</div>`
-            : '';
-          return `<div><div style="display:flex;align-items:center;gap:7px;padding:3px 0"><span style="font-size:14px">${q.icon}</span><span style="font-size:11px;color:var(--text-2);flex:1">${q.label}</span>${val}<span style="font-size:13px;font-weight:700;color:${col};min-width:14px;text-align:right">${icon}</span></div>${nullRow}</div>`;
-        }).join('')}
-      </div>
-      ${d.quantScore != null ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">
-        Quantitative score: <strong style="color:var(--text)">${d.quantScore}/100</strong>
-        ${(d.quantMissing || 0) > 0
-          ? `<span style="margin-left:10px;color:var(--amber)">⚠ Based on ${6 - (d.quantMissing||0)}/6 criteria — ${d.quantMissing} could not be evaluated due to missing data</span>`
-          : `<span style="color:var(--text-3)"> · all 6 criteria evaluated</span>`}
-      </div>` : ''}
-    </div>` : '';
+  const quantHTML = d.quantCriteria?.length ? (() => {
+    const dName = d.name;
+    const rows = d.quantCriteria.map(q => {
+      const icon    = q.pass === true ? '✓' : q.pass === false ? '✗' : '—';
+      const col     = q.pass === true ? 'var(--green)' : q.pass === false ? 'var(--red)' : 'var(--text-3)';
+      const val     = q.value ? '<span style="font-size:10px;color:var(--text-3);margin-right:6px">' + q.value + '</span>' : '';
+      const manBadge = q._manual ? '<span class="manual-badge">manual</span>' : '';
+      const entryId = 'mentry-wrap-' + q.key;
+      const oc = 'openManualEntry(' + JSON.stringify(dName) + ',' + JSON.stringify(q.key) + ',&quot;' + entryId + '&quot;)';
+      const nullSection = q.pass === null
+        ? '<div style="margin-top:4px;padding-left:26px">'
+          + '<div style="font-size:11px;color:var(--amber);line-height:1.5">⚠ ' + (q.nullReason || 'Data unavailable') + '</div>'
+          + '<div style="margin-top:4px"><button class="manual-entry-btn" onclick="' + oc + '">✏ Enter manually</button></div>'
+          + '<div id="' + entryId + '"></div>'
+          + '</div>'
+        : (q._manual
+          ? '<div style="margin-top:2px;padding-left:26px"><button class="manual-entry-btn" style="color:var(--text-3)" onclick="' + oc + '">✏ Edit</button><div id="' + entryId + '"></div></div>'
+          : '');
+      return '<div style="padding:4px 0;border-bottom:1px solid var(--border)">'
+        + '<div style="display:flex;align-items:center;gap:7px">'
+        + '<span style="font-size:14px">' + q.icon + '</span>'
+        + '<span style="font-size:11px;color:var(--text-2);flex:1">' + q.label + manBadge + '</span>'
+        + val
+        + '<span style="font-size:13px;font-weight:700;color:' + col + ';min-width:14px;text-align:right">' + icon + '</span>'
+        + '</div>'
+        + nullSection
+        + '</div>';
+    }).join('');
+    const footer = d.quantScore != null
+      ? '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">'
+        + 'Quantitative score: <strong style="color:var(--text)">' + d.quantScore + '/100</strong>'
+        + ((d.quantMissing || 0) > 0
+          ? '<span style="margin-left:10px;color:var(--amber)">⚠ Based on ' + (6-(d.quantMissing||0)) + '/6 criteria — ' + d.quantMissing + ' could not be evaluated</span>'
+          : '<span style="color:var(--text-3)"> · all 6 criteria evaluated</span>')
+        + '</div>'
+      : '';
+    return '<div class="stock-detail-card full">'
+      + '<div class="stock-card-title">Quantitative Criteria</div>'
+      + '<div style="display:flex;flex-direction:column;margin-top:6px">' + rows + '</div>'
+      + footer
+      + '</div>';
+  })() : '';
 
   const qualHTML = d.scores ? `
     <div class="stock-detail-card">
