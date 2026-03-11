@@ -402,6 +402,8 @@ html{scroll-padding-top:var(--header-h)}
       <div class="nav-sub-item" id="nav-h-REIT"   onclick="filterHoldings('REIT')">REITs</div>
       <div class="nav-sub-item" id="nav-h-Bond"   onclick="filterHoldings('Bond')">Bonds</div>
       <div class="nav-sub-item" id="nav-h-Cash"   onclick="filterHoldings('Cash')">Cash</div>
+      <div class="nav-sub-item" id="nav-h-EM"     onclick="filterHoldings('EM')" style="display:none">🌏 Emerging Markets</div>
+      <div class="nav-sub-item" id="nav-h-Other"  onclick="filterHoldings('Other')" style="display:none">🌍 Other</div>
     </div>
     <div class="nav-label" style="margin-top:10px">Tools</div>
     <div class="nav-item" id="nav-scan"      onclick="showPage('scan')"><span class="nav-icon">&#128269;</span> Stock Scan</div>
@@ -770,6 +772,15 @@ function filterHoldings(filter) {
   document.querySelectorAll('.h-tab').forEach(t => { if (t.textContent.trim().toLowerCase() === (filter === 'all' ? 'all' : filter.toLowerCase())) t.classList.add('active'); });
   renderGroupedHoldings(portfolioRows, portfolioRows.reduce((s,r) => s + r.valueEUR, 0), filter);
   if (window.innerWidth > 760) showPage('dashboard');
+}
+
+function updateRegionNavItems(rows) {
+  const hasEM    = rows.some(r => getRegion(r) === 'EM');
+  const hasOther = rows.some(r => getRegion(r) === 'Other');
+  const emEl    = document.getElementById('nav-h-EM');
+  const otherEl = document.getElementById('nav-h-Other');
+  if (emEl)    emEl.style.display    = hasEM    ? '' : 'none';
+  if (otherEl) otherEl.style.display = hasOther ? '' : 'none';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1584,11 +1595,18 @@ function renderGroupedHoldings(rows, total, filter) {
       </div>`;
     }).join('');
   } else {
+    const REGION_FILTERS = new Set(['US','Europe','EM','Other']);
     const def    = ASSET_GROUPS.find(g => g.key === filter) || { label:filter, icon:'•' };
     titleEl.textContent = def.label;
-    const sorted = filtered.sort((a,b) => b.valueEUR - a.valueEUR);
+    let sorted;
+    if (REGION_FILTERS.has(filter)) {
+      sorted = rows.filter(r => getRegion(r) === filter).sort((a,b) => b.valueEUR - a.valueEUR);
+    } else {
+      sorted = filtered.sort((a,b) => b.valueEUR - a.valueEUR);
+    }
     container.innerHTML = sorted.length ? holdingsTableHTML(sorted, total) : `<div style="padding:40px;text-align:center;color:var(--text-3);font-size:12px">No ${def.label.toLowerCase()} in your portfolio</div>`;
   }
+  updateRegionNavItems(rows);
 }
 
 function toggleHoldingGroup(key) {
