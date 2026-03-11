@@ -254,6 +254,10 @@ td{padding:8px 16px;vertical-align:middle}
 .manual-entry-clear{font-size:10px;padding:3px 8px;background:transparent;color:var(--text-3);border:1px solid var(--border);border-radius:5px;cursor:pointer}
 .manual-entry-clear:hover{color:var(--red);border-color:var(--red)}
 .manual-badge{font-size:9px;color:var(--blue);background:rgba(79,124,247,.12);border:1px solid rgba(79,124,247,.2);border-radius:3px;padding:1px 4px;margin-left:4px}
+.holdings-sub-group{border-top:1px solid var(--border)}
+.holdings-sub-group:first-child{border-top:none}
+.holdings-sub-header{display:flex;align-items:center;justify-content:space-between;padding:7px 14px;cursor:pointer;background:rgba(255,255,255,.02);user-select:none;font-size:12px;color:var(--text-2);font-weight:500}
+.holdings-sub-header:hover{background:rgba(255,255,255,.04)}
 .news-headline{font-size:12px;color:var(--text-2);line-height:1.5;flex:1}
 .news-date{font-size:10px;color:var(--text-3);margin-top:2px}
 .risk-tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,.08);color:#f87171;border:1px solid rgba(239,68,68,.15);margin:3px 3px 0 0}
@@ -1415,14 +1419,64 @@ function setPeriod(p) {
 }
 
 // ── Holdings ─────────────────────────────────────────────────
+// ── Region detection ─────────────────────────────────────────────────────────
+// ISIN country prefixes considered "European" for grouping purposes
+const EU_CC = new Set(['NL','GB','DE','FR','CH','SE','NO','DK','BE','IE','LU','FI','IT','ES','AT','PT','PL','CZ','HU','GR','RO','SK','SI','EE','LV','LT','HR','BG','CY','MT','IS','LI','MC','AD','SM','VA']);
+// ISIN country prefixes considered "US / North America"
+const US_CC = new Set(['US','CA']);
+// ISIN prefixes that are almost always EM (registered domicile)
+const EM_CC = new Set(['CN','HK','IN','TW','KR','BR','MX','ZA','SA','AR','CL','CO','PE','ID','MY','PH','TH','VN','PK','BD','EG','NG','KE','GH','MA','TN','QA','AE','KW','BH','OM','JO','LB','TR','RU','UA','KZ','UZ','GE','AZ','AM','BY','MD','RS','BA','MK','AL','XS']);
+// ETF product-name keywords strongly indicating EM focus
+const EM_ETF_KEYWORDS = ['EMERGING','EMERGING MARKET','EM IMI','MSCI EM','FTSE EM','CHINA','INDIA','BRAZIL','VIETNAM','INDONESIA','SOUTHEAST ASIA','LATAM','LATIN AMERICA','BRICS','FRONTIER MARKET','ASIA PACIFIC EX','EX-JAPAN','EX JAPAN','ASIA EX'];
+
+function getRegion(row) {
+  const cc = (row.isin || '').slice(0, 2).toUpperCase();
+  const n  = (row.product || '').toUpperCase();
+  const isEtf = row.cls && (row.cls.startsWith('ETF') || row.cls === 'REIT');
+
+  // For ETFs, check name keywords first as they override domicile
+  if (isEtf) {
+    if (EM_ETF_KEYWORDS.some(k => n.includes(k))) return 'EM';
+    // European-focused ETF keywords
+    if (['EUROPE','EURO STOXX','EUROSTOXX','STOXX','AEX','DAX','CAC','FTSE 100','FTSE100','MSCI EUROPE','MSCI EMU'].some(k => n.includes(k))) return 'Europe';
+    // US/global ETF
+    if (['S&P 500','SP500','NASDAQ','S&P500','DOW JONES','RUSSELL'].some(k => n.includes(k))) return 'US';
+    // ETF domicile IE/LU → check geo breakdown for majority region
+    if (cc === 'IE' || cc === 'LU') {
+      const geo = getEtfGeoBreakdown(row);
+      if (geo) {
+        const emKeys = ['China','India','Taiwan','South Korea','Brazil','Saudi Arabia','Indonesia','Thailand','Mexico','South Africa','Turkey'];
+        const emPct  = emKeys.reduce((s, k) => s + (geo[k] || 0), 0);
+        const usPct  = geo['United States'] || 0;
+        const euPct  = ['United Kingdom','Germany','France','Netherlands','Switzerland','Sweden','Denmark','Belgium','Finland','Italy','Spain','Norway','Austria','Poland','Portugal'].reduce((s,k) => s + (geo[k]||0), 0);
+        if (emPct > 40) return 'EM';
+        if (usPct > 50) return 'US';
+        if (euPct > 40) return 'Europe';
+      }
+      return 'Other'; // Mixed global
+    }
+  }
+
+  // Stocks and non-IE/LU instruments: use ISIN prefix
+  if (US_CC.has(cc)) return 'US';
+  if (EU_CC.has(cc)) return 'Europe';
+  if (EM_CC.has(cc)) return 'EM';
+  return 'Other';
+}
+
 const ASSET_GROUPS = [
-  { key:'Stock',    label:'Stocks',     icon:'📈' },
-  { key:'ETF',      label:'ETFs',       icon:'🌐' },
-  { key:'REIT',     label:'REITs',      icon:'🏢' },
-  { key:'ETF/REIT', label:'ETF / REIT', icon:'🏠' },
-  { key:'ETF/Bond', label:'ETF / Bond', icon:'📄' },
-  { key:'Bond',     label:'Bonds',      icon:'📄' },
-  { key:'Cash',     label:'Cash',       icon:'💶' },
+  { key:'Stock',    label:'Stocks',             icon:'📈' },
+  { key:'ETF',      label:'ETFs',               icon:'🌐' },
+  { key:'REIT',     label:'REITs',              icon:'🏢' },
+  { key:'ETF/REIT', label:'ETF / REIT',         icon:'🏠' },
+  { key:'ETF/Bond', label:'ETF / Bond',         icon:'📄' },
+  { key:'Bond',     label:'Bonds',              icon:'📄' },
+  { key:'Cash',     label:'Cash',               icon:'💶' },
+  // Region sub-groups (used internally for nested rendering)
+  { key:'US',       label:'United States',      icon:'🇺🇸' },
+  { key:'Europe',   label:'Europe',             icon:'🇪🇺' },
+  { key:'EM',       label:'Emerging Markets',   icon:'🌏' },
+  { key:'Other',    label:'Other',              icon:'🌍' },
 ];
 
 function clsGroup(cls) {
@@ -1467,7 +1521,11 @@ function renderGroupedHoldings(rows, total, filter) {
     const groups = {};
     filtered.forEach(r => { const g = clsGroup(r.cls); if (!groups[g]) groups[g] = []; groups[g].push(r); });
     const order = ['Stock','ETF','REIT','Bond','Cash'];
-    container.innerHTML = order.filter(k => groups[k] && groups[k].length).map((k, idx) => {
+    // Asset types that get region sub-groups
+    const REGIONAL_TYPES = new Set(['Stock','ETF']);
+    const REGION_ORDER = ['US','Europe','EM','Other'];
+
+    container.innerHTML = order.filter(k => groups[k] && groups[k].length).map((k) => {
       const grp    = groups[k].sort((a,b) => b.valueEUR - a.valueEUR);
       const grpVal = grp.reduce((s,r) => s + r.valueEUR, 0);
       const grpPct = (grpVal / total * 100).toFixed(1);
@@ -1475,12 +1533,54 @@ function renderGroupedHoldings(rows, total, filter) {
       const bodyId = 'hg-body-' + k;
       const chevId = 'hg-chev-' + k;
       const open   = k !== 'Cash';
+
+      // Build inner body: region sub-groups for Stock/ETF, plain table otherwise
+      let innerBody;
+      if (REGIONAL_TYPES.has(k)) {
+        // Split into region buckets
+        const byRegion = {};
+        grp.forEach(r => {
+          const reg = getRegion(r);
+          if (!byRegion[reg]) byRegion[reg] = [];
+          byRegion[reg].push(r);
+        });
+        const hasMultipleRegions = Object.keys(byRegion).length > 1;
+        if (hasMultipleRegions) {
+          innerBody = REGION_ORDER.filter(reg => byRegion[reg]?.length).map(reg => {
+            const regRows = byRegion[reg].sort((a,b) => b.valueEUR - a.valueEUR);
+            const regVal  = regRows.reduce((s,r) => s + r.valueEUR, 0);
+            const regPct  = (regVal / total * 100).toFixed(1);
+            const regDef  = ASSET_GROUPS.find(g => g.key === reg);
+            const subBodyId = 'hg-body-' + k + '-' + reg;
+            const subChevId = 'hg-chev-' + k + '-' + reg;
+            const sym = _settings.currency === 'USD' ? '$' : '€';
+            return `<div class="holdings-sub-group">
+              <div class="holdings-sub-header" onclick="toggleHoldingGroup('${k}-${reg}')">
+                <span>${regDef?.icon || '•'} ${regDef?.label || reg}</span>
+                <span style="display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text-3)">
+                  <span class="private">${sym}${Math.round(regVal).toLocaleString('en')}</span>
+                  <span>${regPct}%</span>
+                  <span style="font-size:9px;color:var(--text-3)">(${regRows.length})</span>
+                  <span class="holdings-group-chevron open" id="${subChevId}" style="font-size:9px">▶</span>
+                </span>
+              </div>
+              <div class="holdings-group-body" id="${subBodyId}" style="max-height:2000px">${holdingsTableHTML(regRows, total)}</div>
+            </div>`;
+          }).join('');
+        } else {
+          // Only one region — no sub-grouping needed
+          innerBody = holdingsTableHTML(grp, total);
+        }
+      } else {
+        innerBody = holdingsTableHTML(grp, total);
+      }
+
       return `<div class="holdings-group">
         <div class="holdings-group-header" onclick="toggleHoldingGroup('${k}')">
           <div class="holdings-group-label"><span>${def.icon}</span> ${def.label} <span style="font-size:10px;color:var(--text-3);font-weight:400">(${grp.length})</span></div>
           <div class="holdings-group-meta"><span class="holdings-group-val private">${_settings.currency === 'USD' ? '$' : '€'}${Math.round(grpVal).toLocaleString('en')}</span><span class="holdings-group-pct">${grpPct}%</span><span class="holdings-group-chevron ${open ? 'open' : ''}" id="${chevId}">▶</span></div>
         </div>
-        <div class="holdings-group-body" id="${bodyId}" style="max-height:${open ? '2000px' : '0'}">${holdingsTableHTML(grp, total)}</div>
+        <div class="holdings-group-body" id="${bodyId}" style="max-height:${open ? '4000px' : '0'}">${innerBody}</div>
       </div>`;
     }).join('');
   } else {
