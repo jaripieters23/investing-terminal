@@ -3195,6 +3195,113 @@ async function fetchStockData(nameOrTicker, opts = {}) {
     sentiment: n.sentiment ?? null,
   })) : [];
 
+  // ── Pre-extract Yahoo values so they can be used inline as fallbacks ────────
+  const y = (() => {
+    if (!yahooData) return {};
+    const fd  = yahooData.financialData        || {};
+    const ks  = yahooData.defaultKeyStatistics || {};
+    const ish = yahooData.incomeStatementHistory?.incomeStatementHistory
+             || yahooData.incomeStatementHistoryQuarterly?.incomeStatementHistory || [];
+    const cfh = yahooData.cashflowStatementHistory?.cashflowStatements
+             || yahooData.cashflowStatementHistory?.cashflowStatementHistory
+             || yahooData.cashflowStatementHistoryQuarterly?.cashflowStatements || [];
+    const bsh = yahooData.balanceSheetHistory?.balanceSheetStatements
+             || yahooData.balanceSheetHistoryQuarterly?.balanceSheetStatements || [];
+    const et  = yahooData.earningsTrend?.trend || [];
+    const sd  = yahooData.summaryDetail        || {};
+
+    // Revenue CAGR from income history
+    const yRevs = ish.map(r => _yNum(r.totalRevenue)).filter(v => v && v > 0);
+    const yRevCagr = yRevs.length >= 2
+      ? (Math.pow(yRevs[0] / yRevs[yRevs.length-1], 1/(yRevs.length-1)) - 1) * 100 : null;
+
+    // EPS CAGR from income history
+    const yEpss = ish.map(r => _yNum(r.dilutedEps) ?? _yNum(r.basicEps)).filter(v => v && v > 0);
+    const yEpsCagr = yEpss.length >= 2
+      ? (Math.pow(yEpss[0] / yEpss[yEpss.length-1], 1/(yEpss.length-1)) - 1) * 100 : null;
+
+    // Forward estimates from earningsTrend
+    const trend1y = et.find(t => t.period === '+1y');
+    const trend0y = et.find(t => t.period === '0y');
+    const yFwdRevGrowthRaw = _yNum((trend1y || trend0y)?.revenueEstimate?.growth);
+    const yFwdRevGrowth = yFwdRevGrowthRaw != null ? yFwdRevGrowthRaw * 100 : null;
+    const yTrailingEps = _yNum(ks.trailingEps);
+    const yFwdEpsEst   = _yNum(trend1y?.earningsEstimate?.avg);
+    const yFwdEpsGrowth = yFwdEpsEst && yTrailingEps && yTrailingEps > 0
+      ? (yFwdEpsEst / yTrailingEps - 1) * 100
+      : (_yNum(fd.earningsGrowth) != null ? _yNum(fd.earningsGrowth) * 100 : null);
+
+    // Margins
+    const yGrossMargin = _yNum(fd.grossMargins) != null ? _yNum(fd.grossMargins) * 100 : null;
+    const yOpMargin    = _yNum(fd.operatingMargins) != null ? _yNum(fd.operatingMargins) * 100 : null;
+    const yNetMargin   = _yNum(fd.profitMargins) != null ? _yNum(fd.profitMargins) * 100 : null;
+
+    // FCF & Net Income
+    const yCfOp  = _yNum(fd.operatingCashflow) ?? _yNum(cfh[0]?.totalCashFromOperatingActivities) ?? _yNum(cfh[0]?.operatingActivities);
+    const yCapex = _yNum(fd.capitalExpenditures) ?? _yNum(cfh[0]?.capitalExpenditures) ?? _yNum(cfh[0]?.capitalExpenditure);
+    const yFcf   = yCfOp != null && yCapex != null
+      ? yCfOp - Math.abs(yCapex)
+      : (_yNum(fd.freeCashflow) ?? _yNum(cfh[0]?.freeCashFlow) ?? null);
+    const yNi = _yNum(fd.netIncomeToCommon) ?? _yNum(fd.netIncome)
+             ?? _yNum(ish[0]?.netIncome) ?? _yNum(ish[0]?.netIncomeApplicableToCommonShares);
+    const yRev = _yNum(fd.totalRevenue) ?? _yNum(ish[0]?.totalRevenue);
+    const yFcfConv = yFcf != null && yNi && yNi > 0 ? yFcf / yNi : null;
+    const yNetMarginCalc = yNi != null && yRev && yRev > 0 ? (yNi / yRev) * 100 : null;
+
+    // ROIC
+    const yEbit = _yNum(ish[0]?.ebit) ?? _yNum(ish[0]?.operatingIncome)
+               ?? (_yNum(fd.operatingMargins) != null && yRev != null ? _yNum(fd.operatingMargins) * yRev : null);
+    const yTax  = _yNum(fd.effectiveTaxRate) ?? 0.21;
+    const yEq   = _yNum(bsh[0]?.totalStockholderEquity) ?? _yNum(bsh[0]?.stockholdersEquity);
+    const yLTD  = _yNum(bsh[0]?.longTermDebt) ?? _yNum(bsh[0]?.longTermDebtNoncurrent) ?? 0;
+    const ySTD  = _yNum(bsh[0]?.shortLongTermDebt) ?? _yNum(bsh[0]?.currentDebt) ?? _yNum(bsh[0]?.shortTermDebt) ?? 0;
+    const yTotalDebt = yLTD + ySTD;
+    const yInvCap = yEq != null ? yEq + yTotalDebt : null;
+    const yRoic = yEbit != null && yInvCap && yInvCap > 0
+      ? (yEbit * (1 - yTax) / yInvCap) * 100
+      : (_yNum(fd.returnOnEquity) != null ? _yNum(fd.returnOnEquity) * 100 : null);
+
+    // Net Debt / EBITDA
+    const yCash    = _yNum(bsh[0]?.cash) ?? _yNum(bsh[0]?.cashAndCashEquivalents) ?? _yNum(bsh[0]?.cashAndShortTermInvestments) ?? 0;
+    const yNetDebt = yTotalDebt - yCash;
+    const yDep     = _yNum(cfh[0]?.depreciation) ?? _yNum(cfh[0]?.depreciationAndAmortization) ?? 0;
+    const yEbitda  = yEbit != null ? yEbit + yDep : (_yNum(fd.ebitda) ?? null);
+    const yNetDebtEbitda = yNetDebt != null && yEbitda && yEbitda > 0 ? yNetDebt / yEbitda : null;
+
+    // FCF Yield
+    const yMktCap  = _yNum(sd.marketCap) ?? _yNum(ks.marketCap);
+    const yFcfYield = _yNum(ks.freeCashflowYield) != null
+      ? _yNum(ks.freeCashflowYield) * 100
+      : (yFcf != null && yMktCap && yMktCap > 0 ? (yFcf / yMktCap) * 100 : null);
+
+    // Price & targets
+    const yPrice  = _yNum(fd.currentPrice) ?? _yNum(sd.regularMarketPrice);
+    const yTgtLow  = _yNum(fd.targetLowPrice);
+    const yTgtMean = _yNum(fd.targetMeanPrice) ?? _yNum(fd.targetMedianPrice);
+    const yTgtHigh = _yNum(fd.targetHighPrice);
+
+    console.log('[Yahoo] extracted — grossMargin:', yGrossMargin?.toFixed(1),
+      'opMargin:', yOpMargin?.toFixed(1), 'netMargin:', yNetMargin?.toFixed(1),
+      'roic:', yRoic?.toFixed(1), 'fcfConv:', yFcfConv?.toFixed(2),
+      'revCagr:', yRevCagr?.toFixed(1), 'epsCagr:', yEpsCagr?.toFixed(1),
+      'fwdRev:', yFwdRevGrowth?.toFixed(1), 'fwdEps:', yFwdEpsGrowth?.toFixed(1),
+      'netDebtEbitda:', yNetDebtEbitda?.toFixed(2), 'fcfYield:', yFcfYield?.toFixed(1),
+      'price:', yPrice, 'tgt:', yTgtLow, '/', yTgtMean, '/', yTgtHigh);
+
+    return {
+      grossMargin: yGrossMargin, operatingMargin: yOpMargin,
+      netIncomeMargin: yNetMargin ?? yNetMarginCalc,
+      revenueCagr5y: yRevCagr, epsCagr5y: yEpsCagr,
+      fwdRevGrowth: yFwdRevGrowth, fwdEpsGrowth: yFwdEpsGrowth,
+      fcfConversion: yFcfConv, fcfRaw: yFcf, roic: yRoic,
+      netDebtEbitda: yNetDebtEbitda, netDebtRaw: yNetDebt,
+      fcfYield: yFcfYield,
+      livePrice: yPrice,
+      analystTargets: (yTgtLow || yTgtMean || yTgtHigh)
+        ? { low: yTgtLow, mean: yTgtMean, high: yTgtHigh } : null,
+    };
+  })();
+
   const result = {
     ticker,
     name:             p.name             || nameOrTicker,
@@ -3212,7 +3319,7 @@ async function fetchStockData(nameOrTicker, opts = {}) {
     phone:            p.phone            || null,
     shareOutstanding: p.shareOutstanding || null,
     logo:             p.logo             || null,
-    livePrice,
+    livePrice:        livePrice          ?? y.livePrice ?? null,
     financials: {
       // Display fields
       marketCap:        fmt(mktCap),
@@ -3220,36 +3327,40 @@ async function fetchStockData(nameOrTicker, opts = {}) {
       revenueGrowth:    revGrowth,
       netIncome:        fmt(netIncomeRaw),
       fcfMargin,
-      roic:             roicRaw,
+      roic:             roicRaw          ?? y.roic          ?? null,
       peRatio:          currentPE ? currentPE.toString() : null,
       evEbitda:         latestKm.evToEBITDA ? Number(latestKm.evToEBITDA).toFixed(1) : null,
       dividendYield:    m.dividendYieldIndicatedAnnual != null
                           ? m.dividendYieldIndicatedAnnual.toFixed(2) + '%' : null,
-      // Quantitative scoring fields (raw numbers)
-      grossMargin:      grossMarginRaw,
-      operatingMargin:  operatingMarginRaw,
-      revenueCagr5y:    revCagr5yRaw,
-      epsCagr5y:        epsCagr5yRaw,
-      netDebtEbitda:    netDebtEbitdaRaw,
-      netDebtRaw:       netDebtRawVal,
+      // Quantitative scoring fields (raw numbers) — Yahoo fills any null
+      grossMargin:      grossMarginRaw     ?? y.grossMargin     ?? null,
+      operatingMargin:  operatingMarginRaw ?? y.operatingMargin ?? null,
+      revenueCagr5y:    revCagr5yRaw       ?? y.revenueCagr5y   ?? null,
+      epsCagr5y:        epsCagr5yRaw       ?? y.epsCagr5y       ?? null,
+      netDebtEbitda:    netDebtEbitdaRaw   ?? y.netDebtEbitda   ?? null,
+      netDebtRaw:       netDebtRawVal      ?? y.netDebtRaw      ?? null,
       interestCoverage: interestCovRaw,
-      fcfRaw:           fcfRawVal,
-      fcfConversion:    fcfConvRaw,
+      fcfRaw:           fcfRawVal          ?? y.fcfRaw          ?? null,
+      fcfConversion:    fcfConvRaw         ?? y.fcfConversion   ?? null,
       shareGrowth5y:    shareGrowth5yRaw,
       pegRatio:         pegRaw,
-      fcfYield:         fcfYieldRaw,
-      // Forward-looking (FMP)
-      fwdRevGrowth:     fwdRevGrowthRaw,
-      fwdEpsGrowth:     fwdEpsGrowthRaw,
-      netIncomeMargin:  netIncomeMarginRaw,
+      fcfYield:         fcfYieldRaw        ?? y.fcfYield        ?? null,
+      // Forward-looking (FMP → Yahoo fallback)
+      fwdRevGrowth:     fwdRevGrowthRaw    ?? y.fwdRevGrowth    ?? null,
+      fwdEpsGrowth:     fwdEpsGrowthRaw    ?? y.fwdEpsGrowth    ?? null,
+      netIncomeMargin:  netIncomeMarginRaw ?? y.netIncomeMargin  ?? null,
     },
-    analystTargets: (pt?.targetLow || pt?.targetMean || pt?.targetHigh) ? {
-      low:       pt.targetLow       || null,
-      mean:      pt.targetMedian    || pt.targetMean || null,
-      high:      pt.targetHigh      || null,
-      currency:  pt.currency        || 'USD',
-      consensus: pt.targetConsensus || null,
-    } : null,
+    analystTargets: (pt?.targetLow || pt?.targetMean || pt?.targetHigh)
+      ? {
+          low:       pt.targetLow       || null,
+          mean:      pt.targetMedian    || pt.targetMean || null,
+          high:      pt.targetHigh      || null,
+          currency:  pt.currency        || 'USD',
+          consensus: pt.targetConsensus || null,
+        }
+      : y.analystTargets
+      ? { ...y.analystTargets, currency: result?.currency || 'USD' }
+      : null,
     peHistory: (peAnnual.length && currentPE)
       ? { forwardPE: currentPE, tenYearAvgPE: tenYearAvg, annual: peAnnual } : null,
     // Finnhub-only extras
@@ -3257,11 +3368,8 @@ async function fetchStockData(nameOrTicker, opts = {}) {
     recTrend,
     nextEarnings,
     recentNews: newsItems,
-    _dataSource: 'finnhub+fmp',
+    _dataSource: 'finnhub+fmp' + (yahooData ? '+yahoo' : ''),
   };
-
-  // ── Supplement with Yahoo Finance data for any fields still null ──────────
-  _mergeYahoo(result, yahooData);
 
   _cacheSet(_fmpCache, cacheKey, result, CACHE_TTL_LONG);
   if (ticker) _cacheSet(_fmpCache, ticker.toLowerCase() + (lite ? ':lite' : ''), result, CACHE_TTL_LONG);
