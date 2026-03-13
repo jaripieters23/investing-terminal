@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -433,7 +432,6 @@ html{scroll-padding-top:var(--header-h)}
 <body>
 
 <!-- Global loading overlay -->
-
 <div id="global-loader">
   <div class="loader-orbs">
     <div class="orb3"></div>
@@ -602,64 +600,61 @@ html{scroll-padding-top:var(--header-h)}
       </div>
     </div>
 
-```
-<div class="settings-section">
-  <div class="settings-section-header"><div class="settings-section-title">API Connections</div><div class="settings-section-sub">All API calls are routed through your Cloudflare Workers. No keys are stored in the app.</div></div>
-  <div class="settings-row">
-    <div class="settings-row-label"><strong>Groq — AI scoring &amp; analysis</strong><span>via <code style="font-size:10px;color:var(--blue)">groq-proxy.jaripieters.workers.dev</code></span></div>
-    <div class="settings-row-control">
-      <button class="settings-save-btn secondary" id="groq-test-btn" onclick="testGroqConnection()">Test</button>
-      <span id="groq-test-result" class="test-result" style="color:var(--text-3)"></span>
+    <div class="settings-section">
+      <div class="settings-section-header"><div class="settings-section-title">API Connections</div><div class="settings-section-sub">All API calls are routed through your Cloudflare Workers. No keys are stored in the app.</div></div>
+      <div class="settings-row">
+        <div class="settings-row-label"><strong>Groq — AI scoring &amp; analysis</strong><span>via <code style="font-size:10px;color:var(--blue)">groq-proxy.jaripieters.workers.dev</code></span></div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" id="groq-test-btn" onclick="testGroqConnection()">Test</button>
+          <span id="groq-test-result" class="test-result" style="color:var(--text-3)"></span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label"><strong>FMP — key metrics &amp; estimates</strong><span>via <code style="font-size:10px;color:var(--blue)">fmp-proxy.jaripieters.workers.dev</code></span></div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" id="fmp-test-btn" onclick="testFmpConnection()">Test</button>
+          <span id="fmp-test-result" class="test-result" style="color:var(--text-3)"></span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label"><strong>Finnhub — quotes, profiles &amp; financials</strong><span>via <code style="font-size:10px;color:var(--blue)">finhubb-proxy.jaripieters.workers.dev</code></span></div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" id="finnhub-test-btn" onclick="testFinnhubConnection()">Test</button>
+          <span id="finnhub-test-result" class="test-result" style="color:var(--text-3)"></span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label"><strong>Yahoo Finance — supplementary financials</strong><span>via <code style="font-size:10px;color:var(--blue)">corsproxy.io</code> · fills gaps from free-tier APIs</span></div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" id="yahoo-test-btn" onclick="testYahooConnection()">Test</button>
+          <span id="yahoo-test-result" class="test-result" style="color:var(--text-3)"></span>
+        </div>
+      </div>
     </div>
-  </div>
-  <div class="settings-row">
-    <div class="settings-row-label"><strong>FMP — key metrics &amp; estimates</strong><span>via <code style="font-size:10px;color:var(--blue)">fmp-proxy.jaripieters.workers.dev</code></span></div>
-    <div class="settings-row-control">
-      <button class="settings-save-btn secondary" id="fmp-test-btn" onclick="testFmpConnection()">Test</button>
-      <span id="fmp-test-result" class="test-result" style="color:var(--text-3)"></span>
+    <div class="settings-section">
+      <div class="settings-section-header"><div class="settings-section-title">Stock Scan</div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>Auto-add BUY results to watchlist</strong><span>BUY-scored stocks are automatically added after scanning.</span></div><div class="settings-row-control"><label class="settings-toggle"><input type="checkbox" id="setting-auto-watchlist"><div class="settings-toggle-track"></div><div class="settings-toggle-thumb"></div></label></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>Scan concurrency</strong><span>How many stocks to score in parallel.</span></div><div class="settings-row-control"><select class="settings-select" id="setting-concurrency"><option value="1">1 at a time</option><option value="2">2 at a time</option><option value="3" selected>3 at a time</option><option value="5">5 at a time</option></select></div></div>
     </div>
-  </div>
-  <div class="settings-row">
-    <div class="settings-row-label"><strong>Finnhub — quotes, profiles &amp; financials</strong><span>via <code style="font-size:10px;color:var(--blue)">finhubb-proxy.jaripieters.workers.dev</code></span></div>
-    <div class="settings-row-control">
-      <button class="settings-save-btn secondary" id="finnhub-test-btn" onclick="testFinnhubConnection()">Test</button>
-      <span id="finnhub-test-result" class="test-result" style="color:var(--text-3)"></span>
+    <div class="settings-section">
+      <div class="settings-section-header"><div class="settings-section-title">Display</div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>Home currency</strong><span>Used for portfolio totals.</span></div><div class="settings-row-control"><select class="settings-select" id="setting-currency"><option value="EUR">EUR &euro;</option><option value="USD">USD $</option><option value="GBP">GBP &pound;</option><option value="CHF">CHF</option><option value="SEK">SEK</option><option value="NOK">NOK</option><option value="DKK">DKK</option></select></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>Privacy mode</strong><span>Blur all personal amounts &mdash; values, quantities, prices and the performance chart. Hover any blurred number to reveal it temporarily.</span></div><div class="settings-row-control"><label class="settings-toggle"><input type="checkbox" id="setting-privacy-mode"><div class="settings-toggle-track"></div><div class="settings-toggle-thumb"></div></label></div></div>
     </div>
-  </div>
-  <div class="settings-row">
-    <div class="settings-row-label"><strong>Yahoo Finance — supplementary financials</strong><span>via <code style="font-size:10px;color:var(--blue)">corsproxy.io</code> · fills gaps from free-tier APIs</span></div>
-    <div class="settings-row-control">
-      <button class="settings-save-btn secondary" id="yahoo-test-btn" onclick="testYahooConnection()">Test</button>
-      <span id="yahoo-test-result" class="test-result" style="color:var(--text-3)"></span>
-    </div>
-  </div>
-</div>
-<div class="settings-section">
-  <div class="settings-section-header"><div class="settings-section-title">Stock Scan</div></div>
-  <div class="settings-row"><div class="settings-row-label"><strong>Auto-add BUY results to watchlist</strong><span>BUY-scored stocks are automatically added after scanning.</span></div><div class="settings-row-control"><label class="settings-toggle"><input type="checkbox" id="setting-auto-watchlist"><div class="settings-toggle-track"></div><div class="settings-toggle-thumb"></div></label></div></div>
-  <div class="settings-row"><div class="settings-row-label"><strong>Scan concurrency</strong><span>How many stocks to score in parallel.</span></div><div class="settings-row-control"><select class="settings-select" id="setting-concurrency"><option value="1">1 at a time</option><option value="2">2 at a time</option><option value="3" selected>3 at a time</option><option value="5">5 at a time</option></select></div></div>
-</div>
-<div class="settings-section">
-  <div class="settings-section-header"><div class="settings-section-title">Display</div></div>
-  <div class="settings-row"><div class="settings-row-label"><strong>Home currency</strong><span>Used for portfolio totals.</span></div><div class="settings-row-control"><select class="settings-select" id="setting-currency"><option value="EUR">EUR &euro;</option><option value="USD">USD $</option><option value="GBP">GBP &pound;</option><option value="CHF">CHF</option><option value="SEK">SEK</option><option value="NOK">NOK</option><option value="DKK">DKK</option></select></div></div>
-  <div class="settings-row"><div class="settings-row-label"><strong>Privacy mode</strong><span>Blur all personal amounts &mdash; values, quantities, prices and the performance chart. Hover any blurred number to reveal it temporarily.</span></div><div class="settings-row-control"><label class="settings-toggle"><input type="checkbox" id="setting-privacy-mode"><div class="settings-toggle-track"></div><div class="settings-toggle-thumb"></div></label></div></div>
-</div>
-<div class="settings-section">
-  <div class="settings-section-header"><div class="settings-section-title">Data &amp; Cache</div></div>
+    <div class="settings-section">
+      <div class="settings-section-header"><div class="settings-section-title">Data &amp; Cache</div></div>
 
-  <div class="settings-row"><div class="settings-row-label"><strong>Clear FMP cache</strong><span><span id="fmp-cache-count">0</span> entries cached (TTL 1hr). Clears stock data, Groq scores, and price targets.</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearFmpCache()">Clear</button></div></div>
-  <div class="settings-row"><div class="settings-row-label"><strong>Clear stock detail cache</strong><span><span id="detail-cache-count">0</span> stocks cached.</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearDetailCache()">Clear</button></div></div>
-  <div class="settings-row"><div class="settings-row-label"><strong>API calls this session</strong><span style="font-family:monospace;font-size:12px">Finnhub: <span id="api-call-counter-finnhub" style="color:var(--blue)">0</span> &nbsp;·&nbsp; FMP: <span id="api-call-counter-fmp" style="color:var(--amber)">0</span> &nbsp;·&nbsp; Groq: <span id="api-call-counter-groq" style="color:var(--green)">0</span> &nbsp;<span style="color:var(--text-3)">(limits: Finnhub 60/min, FMP 250/day, Groq by tokens)</span></span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="_apiCalls.finnhub=0;_apiCalls.fmp=0;_apiCalls.groq=0;['finnhub','fmp','groq'].forEach(k=>{const el=document.getElementById('api-call-counter-'+k);if(el)el.textContent='0'});showSettingsToast('Counters reset')">Reset</button></div></div>
-  <div class="settings-row"><div class="settings-row-label"><strong>Clear watchlist</strong><span>Permanently removes all stocks from your watchlist.</span></div><div class="settings-row-control"><button class="settings-save-btn danger" onclick="confirmClearWatchlist()">Clear watchlist</button></div></div>
-</div>
-<div class="settings-section">
-  <div class="settings-section-header"><div class="settings-section-title">About</div></div>
-  <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>Scoring and analysis via <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b for scoring, llama-3.1-8b for detail pages). Financial data split by free tier: <strong style="color:var(--blue)">Finnhub</strong> (quotes, profiles, financials, metrics, news, insider, recommendations, earnings — 60 req/min, no daily cap) + <strong style="color:var(--amber)">FMP</strong> only for data unavailable free on Finnhub: ROIC/EV·EBITDA key-metrics, price targets, forward estimates (250 req/day, cached 24hr). All via Cloudflare Workers — no API keys in the app.</span></div></div>
-  <div class="settings-row"><div class="settings-row-label"><strong>Quality scoring</strong><span>Based on Pieter Slegers' <em>Compounding Quality</em>. 13 quantitative criteria (rule-based, 60%) + 7 qualitative factors scored by AI (40%). Final score /100.</span></div></div>
-  <div class="settings-row"><div class="settings-row-label"><strong>Privacy</strong><span>All portfolio data stays in your browser. API keys are stored securely in your Cloudflare Workers and never touch the app.</span></div></div>
-</div>
-```
-
+      <div class="settings-row"><div class="settings-row-label"><strong>Clear FMP cache</strong><span><span id="fmp-cache-count">0</span> entries cached (TTL 1hr). Clears stock data, Groq scores, and price targets.</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearFmpCache()">Clear</button></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>Clear stock detail cache</strong><span><span id="detail-cache-count">0</span> stocks cached.</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearDetailCache()">Clear</button></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>API calls this session</strong><span style="font-family:monospace;font-size:12px">Finnhub: <span id="api-call-counter-finnhub" style="color:var(--blue)">0</span> &nbsp;·&nbsp; FMP: <span id="api-call-counter-fmp" style="color:var(--amber)">0</span> &nbsp;·&nbsp; Groq: <span id="api-call-counter-groq" style="color:var(--green)">0</span> &nbsp;<span style="color:var(--text-3)">(limits: Finnhub 60/min, FMP 250/day, Groq by tokens)</span></span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="_apiCalls.finnhub=0;_apiCalls.fmp=0;_apiCalls.groq=0;['finnhub','fmp','groq'].forEach(k=>{const el=document.getElementById('api-call-counter-'+k);if(el)el.textContent='0'});showSettingsToast('Counters reset')">Reset</button></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>Clear watchlist</strong><span>Permanently removes all stocks from your watchlist.</span></div><div class="settings-row-control"><button class="settings-save-btn danger" onclick="confirmClearWatchlist()">Clear watchlist</button></div></div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-header"><div class="settings-section-title">About</div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>Scoring and analysis via <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b for scoring, llama-3.1-8b for detail pages). Financial data split by free tier: <strong style="color:var(--blue)">Finnhub</strong> (quotes, profiles, financials, metrics, news, insider, recommendations, earnings — 60 req/min, no daily cap) + <strong style="color:var(--amber)">FMP</strong> only for data unavailable free on Finnhub: ROIC/EV·EBITDA key-metrics, price targets, forward estimates (250 req/day, cached 24hr). All via Cloudflare Workers — no API keys in the app.</span></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>Quality scoring</strong><span>Based on Pieter Slegers' <em>Compounding Quality</em>. 13 quantitative criteria (rule-based, 60%) + 7 qualitative factors scored by AI (40%). Final score /100.</span></div></div>
+      <div class="settings-row"><div class="settings-row-label"><strong>Privacy</strong><span>All portfolio data stays in your browser. API keys are stored securely in your Cloudflare Workers and never touch the app.</span></div></div>
+    </div>
   </div>
 </div>
 
@@ -2116,10 +2111,14 @@ async function testFinnhubConnection() {
 
 async function testYahooConnection() {
   await runConnectionTest('yahoo-test-btn', 'yahoo-test-result', async () => {
-    const data = await yahooGet('AAPL', 'financialData');
-    if (!data?.financialData) throw new Error('No financial data returned');
-    const price = _yNum(data.financialData.currentPrice);
-    return 'Connected — AAPL $' + (price?.toFixed(2) || '—');
+    _yahooCrumb = null; // force fresh crumb
+    _yahooCrumbPromise = null;
+    const data = await yahooGet('AAPL', 'financialData,defaultKeyStatistics');
+    if (!data) throw new Error('No data returned — check browser console for details');
+    if (!data.financialData && !data.defaultKeyStatistics) throw new Error('Unexpected response shape');
+    const price = _yNum(data.financialData?.currentPrice);
+    const name = 'Apple Inc';
+    return 'Connected — ' + name + (price ? ' $' + price.toFixed(2) : '');
   });
 }
 
@@ -2195,12 +2194,25 @@ async function scoreStock(name) {
   const roic          = pct(fin.roic);
   const netDebtEbitda = pct(fin.netDebtEbitda);
   const netDebt       = pct(fin.netDebtRaw);
-  const fcfConv       = pct(fin.fcfConversion);    // ratio 0-1
   const netMargin     = pct(fin.netIncomeMargin);  // %
   const revCagr       = pct(fin.revenueCagr5y);
   const epsCagr       = pct(fin.epsCagr5y);
   const fwdRevGrowth  = pct(fin.fwdRevGrowth);
   const fwdEpsGrowth  = pct(fin.fwdEpsGrowth);
+  // FCF conversion: use stored ratio, or derive from raw FCF + net income if available
+  const fcfConv = (() => {
+    const stored = pct(fin.fcfConversion);
+    if (stored != null) return stored;
+    // Derive from raw values: fcfRaw / (netIncomeMargin% * revenue)
+    const fcfR = pct(fin.fcfRaw);
+    const rev  = pct(fin.revenueCagr5y); // not useful here
+    // Try fcfRaw vs netIncome directly
+    if (fin.fcfRaw != null && fin.netIncomeMargin != null && fin.revenue != null) {
+      const ni = (fin.netIncomeMargin / 100) * fin.revenue;
+      if (ni > 0) return fin.fcfRaw / ni;
+    }
+    return null;
+  })();
 
   // Revenue: hist > 9% AND fwd > 7% (use available side if only one exists)
   const revHistPass = revCagr      != null ? revCagr      > 9 : null;
@@ -2490,7 +2502,27 @@ function updateWatchlistBadge() {
 
 function addToWatchlist(stock) {
   if (watchlist.some(w => w.name === stock.name)) return;
-  watchlist.push({ name: stock.name, ticker: stock.ticker || '', scores: stock.scores, totalScore: stock.totalScore, verdict: stock.verdict, reason: stock.reason, currentPrice: null, currency: null, targetLow: null, targetMean: null, targetHigh: null });
+  const rd = stock.realData || {};
+  const at = rd.analystTargets || null;
+  watchlist.push({
+    name:           stock.name,
+    ticker:         stock.ticker || rd.ticker || '',
+    scores:         stock.scores,
+    totalScore:     stock.totalScore,
+    finalScore:     stock.finalScore,
+    verdict:        stock.verdict,
+    reason:         stock.reason,
+    currentPrice:   rd.livePrice   || stock.currentPrice || null,
+    currency:       rd.currency    || stock.currency     || null,
+    targetLow:      at?.low        || stock.targetLow    || null,
+    targetMean:     at?.mean       || stock.targetMean   || null,
+    targetHigh:     at?.high       || stock.targetHigh   || null,
+    analystTargets: at             || stock.analystTargets || null,
+    quantCriteria:  stock.quantCriteria || null,
+    quantScore:     stock.quantScore    || null,
+    qualScore:      stock.qualScore     || null,
+    realData:       Object.keys(rd).length ? rd : null,
+  });
   saveWatchlist();
 }
 
@@ -2638,22 +2670,59 @@ async function fmpGet(path) {
 }
 
 // ── Yahoo Finance unofficial API ──────────────────────────────────────────────
+// Yahoo requires a crumb token since 2023. We fetch it once per session via the consent page.
+let _yahooCrumb = null;
+let _yahooCrumbPromise = null;
+
+async function _getYahooCrumb() {
+  if (_yahooCrumb) return _yahooCrumb;
+  if (_yahooCrumbPromise) return _yahooCrumbPromise;
+  _yahooCrumbPromise = (async () => {
+    try {
+      // Step 1: hit the main page to get a cookie (via proxy)
+      const cookieUrl = 'https://finance.yahoo.com/';
+      await fetch(WORKERS.yahoo + encodeURIComponent(cookieUrl), {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' }
+      }).catch(() => null);
+      // Step 2: fetch crumb
+      const crumbUrl = 'https://query1.finance.yahoo.com/v1/test/getcrumb';
+      const res = await fetch(WORKERS.yahoo + encodeURIComponent(crumbUrl), {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/plain' }
+      });
+      const crumb = await res.text();
+      if (crumb && crumb.length < 20 && !crumb.includes('<')) {
+        _yahooCrumb = crumb.trim();
+        console.log('[Yahoo] crumb:', _yahooCrumb);
+        return _yahooCrumb;
+      }
+    } catch(e) {
+      console.warn('[Yahoo] crumb fetch failed:', e.message);
+    }
+    _yahooCrumb = null;
+    return null;
+  })();
+  return _yahooCrumbPromise;
+}
+
 async function yahooGet(ticker, modules = 'financialData,defaultKeyStatistics,incomeStatementHistory,cashflowStatementHistory,balanceSheetHistory,earningsTrend,summaryDetail') {
   const cacheKey = 'yahoo:' + ticker.toLowerCase();
   const cached = _cacheGet(_fmpCache, cacheKey);
   if (cached) return cached;
 
-  const yUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}&corsDomain=finance.yahoo.com&formatted=false`;
+  const crumb = await _getYahooCrumb();
+  const crumbParam = crumb ? '&crumb=' + encodeURIComponent(crumb) : '';
+  const yUrl = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}&formatted=false${crumbParam}`;
   const proxyUrl = WORKERS.yahoo + encodeURIComponent(yUrl);
-  console.log('[Yahoo] GET', ticker, modules);
+  console.log('[Yahoo] GET', ticker);
   try {
     const res = await fetch(proxyUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Accept': 'application/json' }
     });
     const text = await res.text().catch(() => '');
-    console.log('[Yahoo] status:', res.status, 'preview:', text.slice(0, 150));
-    if (!res.ok) throw new Error('Yahoo ' + res.status);
+    console.log('[Yahoo] status:', res.status, 'preview:', text.slice(0, 200));
+    if (!res.ok) throw new Error('Yahoo HTTP ' + res.status + ': ' + text.slice(0, 80));
     const json = JSON.parse(text);
+    if (json?.quoteSummary?.error) throw new Error('Yahoo API: ' + (json.quoteSummary.error.description || 'unknown error'));
     const result = json?.quoteSummary?.result?.[0] ?? null;
     if (!result) throw new Error('Yahoo: empty result for ' + ticker);
     _cacheSet(_fmpCache, cacheKey, result, CACHE_TTL_LONG);
@@ -2704,8 +2773,10 @@ function _mergeYahoo(result, yData) {
   const yCfOp  = _yNum(fd.operatingCashflow)  ?? (cfh[0] ? _yNum(cfh[0].totalCashFromOperatingActivities) : null);
   const yCapex = _yNum(fd.capitalExpenditures) ?? (cfh[0] ? _yNum(cfh[0].capitalExpenditures) : null);
   const yFcf   = yCfOp != null && yCapex != null ? yCfOp - Math.abs(yCapex) : (_yNum(fd.freeCashflow) ?? null);
-  const yNi    = _yNum(fd.netIncomeToCommon)   ?? (ish[0] ? _yNum(ish[0].netIncome) : null);
+  const yNi    = _yNum(fd.netIncomeToCommon) ?? _yNum(fd.netIncome) ?? (ish[0] ? (_yNum(ish[0].netIncome) ?? _yNum(ish[0].netIncomeApplicableToCommonShares)) : null);
   if (yFcf != null && yNi && yNi > 0) fill('fcfConversion', yFcf / yNi);
+  // Also fill raw FCF for other uses
+  if (yFcf != null) fill('fcfRaw', yFcf);
 
   // Net margin
   const yRev = _yNum(fd.totalRevenue) ?? (ish[0] ? _yNum(ish[0].totalRevenue) : null);
@@ -2940,11 +3011,27 @@ async function fetchStockData(nameOrTicker, opts = {}) {
     // Primary: Finnhub cashflow series
     if (fcfRawVal != null && netIncomeRaw != null && netIncomeRaw > 0)
       return fcfRawVal / netIncomeRaw;
-    // Fallback: FMP key-metrics per-share figures (same ratio, share count cancels out)
+    // Fallback 1: FMP key-metrics per-share figures (same ratio, share count cancels out)
     const fmpFcfPs  = latestKm.freeCashFlowPerShare ?? null;
     const fmpNiPs   = latestKm.netIncomePerShare    ?? null;
     if (fmpFcfPs != null && fmpNiPs != null && fmpNiPs > 0)
       return fmpFcfPs / fmpNiPs;
+    // Fallback 2: Finnhub /stock/metric has fcfMarginTTM or separate FCF/NI metrics
+    const fhFcfM = m.freeCashFlowMarginTTM ?? m.fcfMarginTTM ?? null;
+    const fhNiM  = m.netProfitMarginTTM    ?? m.netProfitMarginAnnual ?? null;
+    if (fhFcfM != null && fhNiM != null && fhNiM > 0)
+      return fhFcfM / fhNiM;
+    // Fallback 3: Finnhub metric FCF per share / EPS
+    const fhFcfPs = m.freeCashFlowPerShareTTM ?? m.freeCashFlowPerShareAnnual ?? null;
+    const fhEps   = m.epsBasicExclExtraItemsTTM ?? m.epsExclExtraItemsTTM ?? m.epsTTM ?? null;
+    if (fhFcfPs != null && fhEps != null && fhEps > 0)
+      return fhFcfPs / fhEps;
+    // Fallback 4: derive from revenue if we have FCF margin and net margin
+    const fhRevPs = m.revenuePerShareTTM ?? null;
+    if (fhFcfPs != null && fhRevPs != null && fhRevPs > 0 && fhNiM != null && fhNiM > 0) {
+      const niPs = fhRevPs * (fhNiM / 100);
+      if (niPs > 0) return fhFcfPs / niPs;
+    }
     return null;
   })();
 
@@ -3328,20 +3415,23 @@ async function showStockDetail(name, fromPage) {
     return;
   }
 
-  // Get scan data if available
+  // Get scan data if available — includes realData already fetched during scan
   const scanData = scanResults.find(s => s.name === name) || watchlist.find(w => w.name === name) || null;
+  const existingRealData = scanData?.realData || null;
 
   document.getElementById('stock-page').innerHTML = `<div class="stock-detail-topbar"><button class="stock-back-btn" onclick="showPage('${_prevPage}')">&#8592; Back</button><span style="font-size:13px;font-weight:600;color:var(--text)">${name}</span></div>`;
-  showLoader('Analysing ' + name, 'Fetching financials & AI insights…');
+  showLoader('Analysing ' + name, existingRealData ? 'Loading AI insights…' : 'Fetching financials & AI insights…');
 
-  // Fetch real data and AI analysis in parallel
-  let realData = null, realError = null;
+  // If we already have realData from the scan, skip re-fetching it
+  let realData = existingRealData, realError = null;
   let aiData   = null;
 
-  const [rd, ad] = await Promise.allSettled([
-    fetchRealData(name),
+  const fetches = [
+    existingRealData ? Promise.resolve(existingRealData) : fetchRealData(name),
     fetchStockDetailAI(name, scanData)
-  ]);
+  ];
+
+  const [rd, ad] = await Promise.allSettled(fetches);
 
   if (rd.status === 'fulfilled') realData = rd.value;
   else { realError = rd.reason?.message || 'fetch failed'; }
@@ -3641,28 +3731,35 @@ function clearManualEntry(name, key) {
 }
 
 function buildStockDetailData(name, scanData, realData, aiData, realError) {
+  // Prefer already-fetched realData from the scan result over the freshly fetched one
+  // (avoids redundant API calls and ensures consistency)
+  const rd = realData || scanData?.realData || null;
+
   return {
-    name:             realData?.name             || name,
-    ticker:           realData?.ticker           || scanData?.ticker || '',
-    exchange:         realData?.exchange         || '',
-    currency:         realData?.currency         || '',
-    sector:           realData?.sector           || '',
-    industry:         realData?.industry         || '',
-    gics:             realData?.gics             || null,
-    gicsSubIndustry:  realData?.gicsSubIndustry  || null,
-    country:          realData?.country          || '',
-    employees:        realData?.employees        || null,
-    ipoDate:          realData?.ipoDate          || null,
-    weburl:           realData?.weburl           || null,
-    phone:            realData?.phone            || null,
-    shareOutstanding: realData?.shareOutstanding || null,
-    logo:             realData?.logo             || null,
-    livePrice:        realData?.livePrice        || null,
-    description:      aiData?.description        || realData?.description || '',
-    financials:     realData?.financials     || null,
-    analystTargets: realData?.analystTargets || null,
-    peHistory:      realData?.peHistory      || null,
-    recTrend:       realData?.recTrend       || null,
+    name:             rd?.name             || name,
+    ticker:           rd?.ticker           || scanData?.ticker || '',
+    exchange:         rd?.exchange         || '',
+    currency:         rd?.currency         || '',
+    sector:           rd?.sector           || '',
+    industry:         rd?.industry         || '',
+    gics:             rd?.gics             || null,
+    gicsSubIndustry:  rd?.gicsSubIndustry  || null,
+    country:          rd?.country          || '',
+    employees:        rd?.employees        || null,
+    ipoDate:          rd?.ipoDate          || null,
+    weburl:           rd?.weburl           || null,
+    phone:            rd?.phone            || null,
+    shareOutstanding: rd?.shareOutstanding || null,
+    logo:             rd?.logo             || null,
+    livePrice:        rd?.livePrice        || scanData?.realData?.livePrice || null,
+    description:      aiData?.description  || rd?.description || '',
+    financials:       rd?.financials       || null,
+    analystTargets:   rd?.analystTargets   || scanData?.analystTargets || null,
+    peHistory:        rd?.peHistory        || null,
+    recTrend:         rd?.recTrend         || null,
+    insiderSummary:   rd?.insiderSummary   || null,
+    nextEarnings:     rd?.nextEarnings     || null,
+    recentNews:       rd?.recentNews?.length ? rd.recentNews : (aiData?.recentNews || []),
     scores:       scanData?.scores      || (aiData?.qualityScores ? {
       moat: aiData.qualityScores.moat?.score || aiData.qualityScores.moat || 0,
       pricing: aiData.qualityScores.pricing?.score || 0,
@@ -3676,7 +3773,6 @@ function buildStockDetailData(name, scanData, realData, aiData, realError) {
     quantCriteria: (() => {
       const base = scanData?.quantCriteria || null;
       if (!base) return null;
-      // Store original nullReasons before applying overrides
       const withOrigReasons = base.map(q => ({ ...q, _origNullReason: q.nullReason }));
       return applyManualOverrides(name, withOrigReasons);
     })(),
@@ -3699,8 +3795,7 @@ function buildStockDetailData(name, scanData, realData, aiData, realError) {
     bullCase:    aiData?.bullCase      || [],
     bearCase:    aiData?.bearCase      || [],
     risks:       aiData?.risks         || [],
-    recentNews:  aiData?.recentNews    || [],
-    _dataSource: realData?._dataSource || null,
+    _dataSource: rd?._dataSource || null,
     _realError:  realError,
   };
 }
@@ -4288,7 +4383,6 @@ try {
   if (el) { el.textContent = 'Init error: ' + e.message + ' — ' + (e.stack||'').split('\n')[1]; el.style.display = 'block'; }
 }
 </script>
-
 <div id="init-error-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#ef4444;color:#fff;padding:10px 16px;font-size:13px;font-family:monospace;white-space:pre-wrap;word-break:break-all"></div>
 <div class="modal-backdrop" id="missing-modal-backdrop" onclick="closeMissingModal()"></div>
 <div class="modal" id="missing-modal">
