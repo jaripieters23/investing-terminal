@@ -2711,123 +2711,217 @@ async function yahooGet(ticker, modules = 'financialData,defaultKeyStatistics,in
 
   const crumb = await _getYahooCrumb();
   const crumbParam = crumb ? '&crumb=' + encodeURIComponent(crumb) : '';
-  const yUrl = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}&formatted=false${crumbParam}`;
-  const proxyUrl = WORKERS.yahoo + encodeURIComponent(yUrl);
-  console.log('[Yahoo] GET', ticker);
-  try {
-    const res = await fetch(proxyUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Accept': 'application/json' }
-    });
-    const text = await res.text().catch(() => '');
-    console.log('[Yahoo] status:', res.status, 'preview:', text.slice(0, 200));
-    if (!res.ok) throw new Error('Yahoo HTTP ' + res.status + ': ' + text.slice(0, 80));
-    const json = JSON.parse(text);
-    if (json?.quoteSummary?.error) throw new Error('Yahoo API: ' + (json.quoteSummary.error.description || 'unknown error'));
-    const result = json?.quoteSummary?.result?.[0] ?? null;
-    if (!result) throw new Error('Yahoo: empty result for ' + ticker);
-    _cacheSet(_fmpCache, cacheKey, result, CACHE_TTL_LONG);
-    return result;
-  } catch (e) {
-    console.warn('[Yahoo] failed for', ticker, '—', e.message);
-    return null;
+  const modulesEnc = encodeURIComponent(modules);
+
+  // Try query2 first, then query1 as fallback
+  const hosts = ['query2.finance.yahoo.com', 'query1.finance.yahoo.com'];
+  for (const host of hosts) {
+    const yUrl = `https://${host}/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modulesEnc}&formatted=false&corsDomain=finance.yahoo.com${crumbParam}`;
+    const proxyUrl = WORKERS.yahoo + encodeURIComponent(yUrl);
+    try {
+      const res = await fetch(proxyUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json, */*' }
+      });
+      const text = await res.text().catch(() => '');
+      if (!text) continue;
+      // Log only on first host for brevity
+      if (host === hosts[0]) console.log('[Yahoo]', ticker, 'status:', res.status, text.slice(0, 120));
+      if (!res.ok) {
+        // 401 = bad/missing crumb, clear it and try without on next host
+        if (res.status === 401 || res.status === 403) { _yahooCrumb = null; _yahooCrumbPromise = null; }
+        continue;
+      }
+      let json;
+      try { json = JSON.parse(text); } catch { continue; }
+      if (json?.quoteSummary?.error) {
+        console.warn('[Yahoo]', ticker, 'API error:', json.quoteSummary.error.description);
+        continue;
+      }
+      const result = json?.quoteSummary?.result?.[0] ?? null;
+      if (!result) continue;
+      _cacheSet(_fmpCache, cacheKey, result, CACHE_TTL_LONG);
+      return result;
+    } catch (e) {
+      console.warn('[Yahoo]', ticker, host, e.message);
+    }
   }
+  console.warn('[Yahoo] all hosts failed for', ticker);
+  return null;
 }
 
 // Parse a Yahoo raw number (could be {raw, fmt} object or plain number)
 function _yNum(v) {
   if (v == null) return null;
-  if (typeof v === 'object') return v.raw ?? null;
-  return typeof v === 'number' ? v : null;
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  if (typeof v === 'object') {
+    const r = v.raw ?? v.value ?? null;
+    if (typeof r === 'number') return isFinite(r) ? r : null;
+    if (typeof r === 'string') { const n = parseFloat(r); return isFinite(n) ? n : null; }
+    return null;
+  }
+  if (typeof v === 'string') { const n = parseFloat(v); return isFinite(n) ? n : null; }
+  return null;
 }
 
 // Merge Yahoo data into the fetchStockData result — fills in nulls only
 function _mergeYahoo(result, yData) {
-  if (!yData) return result;
-  const fd  = yData.financialData       || {};
+  if (!yData) { console.warn('[Yahoo] _mergeYahoo: no yData'); return result; }
+  const fd  = yData.financialData        || {};
   const ks  = yData.defaultKeyStatistics || {};
-  const ish = yData.incomeStatementHistory?.incomeStatementHistory || [];
-  const cfh = yData.cashflowStatementHistory?.cashflowStatementHistory || [];
-  const bsh = yData.balanceSheetHistory?.balanceSheetStatements || [];
+  const ish = (yData.incomeStatementHistory?.incomeStatementHistory
+            || yData.incomeStatementHistoryQuarterly?.incomeStatementHistory
+            || []);
+  const cfh = (yData.cashflowStatementHistory?.cashflowStatements
+            || yData.cashflowStatementHistory?.cashflowStatementHistory
+            || yData.cashflowStatementHistoryQuarterly?.cashflowStatements
+            || []);
+  const bsh = (yData.balanceSheetHistory?.balanceSheetStatements
+            || yData.balanceSheetHistoryQuarterly?.balanceSheetStatements
+            || []);
   const et  = yData.earningsTrend?.trend || [];
   const sd  = yData.summaryDetail        || {};
 
+  // Log what Yahoo returned for debugging
+  console.log('[Yahoo] merge — modules present:', Object.keys(yData).join(', '));
+  console.log('[Yahoo] fd keys:', Object.keys(fd).filter(k => fd[k] != null).join(', '));
+  console.log('[Yahoo] ish.length:', ish.length, 'cfh.length:', cfh.length, 'bsh.length:', bsh.length);
+
   const f = result.financials;
 
-  // Helper: only fill if currently null
-  const fill = (key, val) => { if (f[key] == null && val != null) f[key] = val; };
+  // fill: set if current value is null OR is a formatted string that hid a null
+  // Some fields stored as "12.3%" strings — strip to compare
+  const fill = (key, val) => {
+    if (val == null) return;
+    const cur = f[key];
+    // Already has a usable value (non-null, non-zero number or non-empty string)
+    if (cur != null && cur !== '') return;
+    f[key] = val;
+  };
+  // fillRaw: always prefer raw number, overwriting formatted strings
+  const fillRaw = (key, val) => {
+    if (val == null) return;
+    const cur = f[key];
+    if (cur != null && typeof cur === 'number') return; // already a raw number
+    f[key] = val;
+  };
 
-  // Revenue growth (YoY, most recent 2 years from income history)
+  // ── Revenue growth ────────────────────────────────────────────────────────
+  // Use multi-year income history for CAGR if we have ≥3 years
   if (ish.length >= 2) {
-    const r0 = _yNum(ish[0].totalRevenue), r1 = _yNum(ish[1].totalRevenue);
-    if (r0 && r1 && r1 > 0) fill('revenueCagr5y', (r0 / r1 - 1) * 100);
+    const revs = ish.map(r => _yNum(r.totalRevenue)).filter(v => v && v > 0);
+    if (revs.length >= 2) {
+      const years = revs.length - 1;
+      fill('revenueCagr5y', (Math.pow(revs[0] / revs[revs.length - 1], 1 / years) - 1) * 100);
+    }
   }
 
-  // EPS growth — use TTM + forward from earningsTrend
-  const epsActual = _yNum(ks.trailingEps);
-  const epsFwd    = et.find(t => t.period === '+1y');
-  const epsFwdVal = _yNum(epsFwd?.earningsEstimate?.avg);
-  if (epsActual && epsFwdVal && epsActual > 0) fill('epsCagr5y', (epsFwdVal / epsActual - 1) * 100);
-  if (epsFwdVal && epsActual && epsActual > 0) fill('fwdEpsGrowth', (epsFwdVal / epsActual - 1) * 100);
+  // Forward revenue growth from earningsTrend
+  const fwdRevTrend = et.find(t => t.period === '+1y') || et.find(t => t.period === '0y');
+  const fwdRevGrowthRaw = _yNum(fwdRevTrend?.revenueEstimate?.growth);
+  if (fwdRevGrowthRaw != null) fill('fwdRevGrowth', fwdRevGrowthRaw * 100);  // already a ratio
 
-  // FCF conversion: freeCashflow / netIncome
-  const yCfOp  = _yNum(fd.operatingCashflow)  ?? (cfh[0] ? _yNum(cfh[0].totalCashFromOperatingActivities) : null);
-  const yCapex = _yNum(fd.capitalExpenditures) ?? (cfh[0] ? _yNum(cfh[0].capitalExpenditures) : null);
-  const yFcf   = yCfOp != null && yCapex != null ? yCfOp - Math.abs(yCapex) : (_yNum(fd.freeCashflow) ?? null);
-  const yNi    = _yNum(fd.netIncomeToCommon) ?? _yNum(fd.netIncome) ?? (ish[0] ? (_yNum(ish[0].netIncome) ?? _yNum(ish[0].netIncomeApplicableToCommonShares)) : null);
+  // ── EPS ───────────────────────────────────────────────────────────────────
+  // Historical EPS CAGR from income statement
+  if (ish.length >= 2) {
+    const epss = ish.map(r => _yNum(r.dilutedEps) ?? _yNum(r.basicEps)).filter(v => v && v > 0);
+    if (epss.length >= 2) {
+      const years = epss.length - 1;
+      fill('epsCagr5y', (Math.pow(epss[0] / epss[epss.length - 1], 1 / years) - 1) * 100);
+    }
+  }
+  // Forward EPS growth
+  const fwdEpsTrend = et.find(t => t.period === '+1y');
+  const epsActual   = _yNum(ks.trailingEps) ?? _yNum(fd.revenuePerShare);
+  const epsFwdEst   = _yNum(fwdEpsTrend?.earningsEstimate?.avg);
+  if (epsActual && epsFwdEst && epsActual > 0) fill('fwdEpsGrowth', (epsFwdEst / epsActual - 1) * 100);
+  // Long-term growth rate from Yahoo
+  const ltGrowth = _yNum(fd.earningsGrowth) ?? _yNum(fd.revenueGrowth);
+  if (ltGrowth != null) fill('fwdEpsGrowth', ltGrowth * 100);
+
+  // ── FCF & Net Income ──────────────────────────────────────────────────────
+  const yCfOp  = _yNum(fd.operatingCashflow)
+               ?? (cfh[0] ? (_yNum(cfh[0].totalCashFromOperatingActivities) ?? _yNum(cfh[0].operatingActivities)) : null);
+  const yCapex = _yNum(fd.capitalExpenditures)
+               ?? (cfh[0] ? (_yNum(cfh[0].capitalExpenditures) ?? _yNum(cfh[0].capitalExpenditure)) : null);
+  const yFcf   = (yCfOp != null && yCapex != null)
+               ? yCfOp - Math.abs(yCapex)
+               : (_yNum(fd.freeCashflow) ?? (cfh[0] ? _yNum(cfh[0].freeCashFlow) : null));
+  const yNi    = _yNum(fd.netIncomeToCommon)
+               ?? _yNum(fd.netIncome)
+               ?? (ish[0] ? (_yNum(ish[0].netIncome) ?? _yNum(ish[0].netIncomeApplicableToCommonShares)) : null);
   if (yFcf != null && yNi && yNi > 0) fill('fcfConversion', yFcf / yNi);
-  // Also fill raw FCF for other uses
   if (yFcf != null) fill('fcfRaw', yFcf);
 
-  // Net margin
-  const yRev = _yNum(fd.totalRevenue) ?? (ish[0] ? _yNum(ish[0].totalRevenue) : null);
-  if (yNi != null && yRev && yRev > 0) fill('netIncomeMargin', (yNi / yRev) * 100);
-
-  // ROIC — Yahoo doesn't have it directly; compute from EBIT and invested capital
-  const yEbit   = ish[0] ? (_yNum(ish[0].ebit) ?? _yNum(ish[0].operatingIncome)) : null;
-  const yTaxRate = _yNum(fd.effectiveTaxRate) ?? 0.21;
-  const yTotalEq = bsh[0] ? _yNum(bsh[0].totalStockholderEquity) : null;
-  const yTotalDebt = bsh[0] ? (_yNum(bsh[0].longTermDebt) ?? 0) + (_yNum(bsh[0].shortLongTermDebt) ?? 0) : null;
-  const yInvestedCap = yTotalEq != null && yTotalDebt != null ? yTotalEq + yTotalDebt : null;
-  if (yEbit != null && yInvestedCap && yInvestedCap > 0) {
-    fill('roic', (yEbit * (1 - yTaxRate) / yInvestedCap) * 100);
+  // ── Net margin ────────────────────────────────────────────────────────────
+  const netMarginDirect = _yNum(fd.profitMargins);
+  if (netMarginDirect != null) fill('netIncomeMargin', netMarginDirect * 100);
+  else {
+    const yRev = _yNum(fd.totalRevenue) ?? (ish[0] ? _yNum(ish[0].totalRevenue) : null);
+    if (yNi != null && yRev && yRev > 0) fill('netIncomeMargin', (yNi / yRev) * 100);
   }
 
-  // Net Debt / EBITDA
-  const yCash    = bsh[0] ? _yNum(bsh[0].cash) : null;
-  const yDebt    = yTotalDebt;
-  const yNetDebt = yCash != null && yDebt != null ? yDebt - yCash : null;
-  const yDepAmort = cfh[0] ? _yNum(cfh[0].depreciation) : null;
-  const yEbitda  = yEbit != null && yDepAmort != null ? yEbit + yDepAmort : null;
+  // ── Gross & Operating margin ──────────────────────────────────────────────
+  const grossM = _yNum(fd.grossMargins);
+  if (grossM != null) fill('grossMargin', grossM * 100);
+  const opM = _yNum(fd.operatingMargins) ?? _yNum(fd.ebitdaMargins);
+  if (opM != null) fill('operatingMargin', opM * 100);
+
+  // ── ROIC ─────────────────────────────────────────────────────────────────
+  const yReturnOnEquity  = _yNum(fd.returnOnEquity);
+  const yReturnOnAssets  = _yNum(fd.returnOnAssets);
+  // Compute ROIC from EBIT + invested capital
+  const yEbit = (ish[0]
+    ? (_yNum(ish[0].ebit) ?? _yNum(ish[0].operatingIncome) ?? _yNum(ish[0].totalOperatingExpenses))
+    : null) ?? (_yNum(fd.operatingMargins) != null && _yNum(fd.totalRevenue) != null
+      ? _yNum(fd.operatingMargins) * _yNum(fd.totalRevenue)
+      : null);
+  const yTaxRate     = _yNum(fd.effectiveTaxRate) ?? 0.21;
+  const yTotalEq     = bsh[0] ? (_yNum(bsh[0].totalStockholderEquity) ?? _yNum(bsh[0].stockholdersEquity)) : null;
+  const yLTDebt      = bsh[0] ? (_yNum(bsh[0].longTermDebt) ?? _yNum(bsh[0].longTermDebtNoncurrent) ?? 0) : 0;
+  const ySTDebt      = bsh[0] ? (_yNum(bsh[0].shortLongTermDebt) ?? _yNum(bsh[0].currentDebt) ?? _yNum(bsh[0].shortTermDebt) ?? 0) : 0;
+  const yTotalDebt   = yLTDebt + ySTDebt;
+  const yInvestedCap = yTotalEq != null ? yTotalEq + yTotalDebt : null;
+  if (yEbit != null && yInvestedCap && yInvestedCap > 0) {
+    fillRaw('roic', (yEbit * (1 - yTaxRate) / yInvestedCap) * 100);
+  } else if (yReturnOnEquity != null) {
+    // ROE as rough ROIC proxy
+    fillRaw('roic', yReturnOnEquity * 100);
+  } else if (yReturnOnAssets != null) {
+    fillRaw('roic', yReturnOnAssets * 100);
+  }
+
+  // ── Net Debt / EBITDA ─────────────────────────────────────────────────────
+  const yCash     = bsh[0] ? (_yNum(bsh[0].cash) ?? _yNum(bsh[0].cashAndCashEquivalents) ?? _yNum(bsh[0].cashAndShortTermInvestments) ?? 0) : 0;
+  const yNetDebt  = yTotalDebt - yCash;
+  const yDepAmort = cfh[0] ? (_yNum(cfh[0].depreciation) ?? _yNum(cfh[0].depreciationAndAmortization) ?? 0) : 0;
+  const yEbitda   = yEbit != null ? yEbit + yDepAmort : (_yNum(fd.ebitda) ?? null);
   if (yNetDebt != null && yEbitda && yEbitda > 0) fill('netDebtEbitda', yNetDebt / yEbitda);
   if (yNetDebt != null) fill('netDebtRaw', yNetDebt);
 
-  // Forward revenue growth
-  const fwdRev = et.find(t => t.period === '+1y');
-  const fwdRevGrowth = _yNum(fwdRev?.revenueEstimate?.growth);
-  if (fwdRevGrowth != null) fill('fwdRevGrowth', fwdRevGrowth * 100);
-
-  // FCF yield, PE, dividend from summaryDetail / defaultKeyStatistics
-  fill('fcfYield', _yNum(ks.freeCashflowYield) != null ? _yNum(ks.freeCashflowYield) * 100 : null);
-  fill('grossMargin', _yNum(fd.grossMargins) != null ? _yNum(fd.grossMargins) * 100 : null);
-  fill('operatingMargin', _yNum(fd.operatingMargins) != null ? _yNum(fd.operatingMargins) * 100 : null);
-
-  // Also fill live price if missing
-  if (!result.livePrice) {
-    const yPrice = _yNum(fd.currentPrice);
-    if (yPrice) result.livePrice = yPrice;
+  // ── Valuation ─────────────────────────────────────────────────────────────
+  const yFcfYield = _yNum(ks.freeCashflowYield);
+  if (yFcfYield != null) fill('fcfYield', yFcfYield * 100);
+  // Compute FCF yield from market cap if we have it
+  else if (yFcf != null) {
+    const mktCap = _yNum(sd.marketCap) ?? _yNum(ks.marketCap);
+    if (mktCap && mktCap > 0) fill('fcfYield', (yFcf / mktCap) * 100);
   }
 
-  // Analyst targets from Yahoo
+  // ── Live price & analyst targets ──────────────────────────────────────────
+  if (!result.livePrice) {
+    const yPrice = _yNum(fd.currentPrice) ?? _yNum(sd.regularMarketPrice);
+    if (yPrice) result.livePrice = yPrice;
+  }
   if (!result.analystTargets) {
     const yLow  = _yNum(fd.targetLowPrice);
-    const yMean = _yNum(fd.targetMeanPrice);
+    const yMean = _yNum(fd.targetMeanPrice) ?? _yNum(fd.targetMedianPrice);
     const yHigh = _yNum(fd.targetHighPrice);
     if (yLow || yMean || yHigh) {
       result.analystTargets = { low: yLow, mean: yMean, high: yHigh, currency: result.currency || 'USD' };
     }
   }
 
-  result._dataSource = result._dataSource + '+yahoo';
+  result._dataSource = (result._dataSource || 'unknown') + '+yahoo';
   return result;
 }
 
@@ -3126,7 +3220,7 @@ async function fetchStockData(nameOrTicker, opts = {}) {
       revenueGrowth:    revGrowth,
       netIncome:        fmt(netIncomeRaw),
       fcfMargin,
-      roic:             roicRaw != null ? roicRaw.toFixed(1) + '%' : null,
+      roic:             roicRaw,
       peRatio:          currentPE ? currentPE.toString() : null,
       evEbitda:         latestKm.evToEBITDA ? Number(latestKm.evToEBITDA).toFixed(1) : null,
       dividendYield:    m.dividendYieldIndicatedAnnual != null
