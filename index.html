@@ -624,7 +624,7 @@ html{scroll-padding-top:var(--header-h)}
         </div>
       </div>
       <div class="settings-row">
-        <div class="settings-row-label"><strong>Yahoo Finance — supplementary financials</strong><span>via <code style="font-size:10px;color:var(--blue)">corsproxy.io</code> · fills gaps from free-tier APIs</span></div>
+        <div class="settings-row-label"><strong>Yahoo Finance — supplementary financials</strong><span>via <code style="font-size:10px;color:var(--blue)">yahoo-proxy.jaripieters.workers.dev</code> · fills gaps from free-tier APIs</span></div>
         <div class="settings-row-control">
           <button class="settings-save-btn secondary" id="yahoo-test-btn" onclick="testYahooConnection()">Test</button>
           <span id="yahoo-test-result" class="test-result" style="color:var(--text-3)"></span>
@@ -693,7 +693,7 @@ const WORKERS = {
   groq:    'https://groq-proxy.jaripieters.workers.dev',
   fmp:     'https://fmp-proxy.jaripieters.workers.dev',
   finnhub: 'https://finhubb-proxy.jaripieters.workers.dev',
-  yahoo:   'https://corsproxy.io/?url=',   // CORS proxy for Yahoo Finance unofficial API
+  yahoo:   'https://yahoo-proxy.jaripieters.workers.dev',
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -2669,82 +2669,30 @@ async function fmpGet(path) {
 
 // ── Yahoo Finance unofficial API ──────────────────────────────────────────────
 // Yahoo requires a crumb token since 2023. We fetch it once per session via the consent page.
-// ── Yahoo Finance — crumb-free, multi-proxy approach ─────────────────────────
-const YAHOO_PROXIES = [
-  url => 'https://corsproxy.io/?url=' + encodeURIComponent(url),
-  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-  url => 'https://thingproxy.freeboard.io/fetch/' + url,
-];
-
-async function _yahooFetch(url) {
-  for (const proxy of YAHOO_PROXIES) {
-    try {
-      const res = await fetch(proxy(url), {
-        headers: { 'Accept': 'application/json, text/plain, */*', 'User-Agent': 'Mozilla/5.0' }
-      });
-      if (!res.ok) continue;
-      const text = await res.text();
-      if (!text || text.startsWith('<')) continue;  // HTML error page
-      return text;
-    } catch(e) { /* try next proxy */ }
-  }
-  return null;
-}
+// ── Yahoo Finance — via Cloudflare Worker proxy ───────────────────────────────
+const YAHOO_PROXIES = null; // no longer needed
 
 async function yahooGet(ticker, modules = 'financialData,defaultKeyStatistics,incomeStatementHistory,cashflowStatementHistory,balanceSheetHistory,earningsTrend,summaryDetail') {
   const cacheKey = 'yahoo:' + ticker.toLowerCase();
   const cached = _cacheGet(_fmpCache, cacheKey);
   if (cached) return cached;
 
-  // Try v10 quoteSummary (no crumb needed via proxy)
-  const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
-  for (const host of hosts) {
-    const url = `https://${host}/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}&formatted=false&corsDomain=finance.yahoo.com`;
-    const text = await _yahooFetch(url);
-    if (!text) continue;
-    try {
-      const json = JSON.parse(text);
-      if (json?.quoteSummary?.error) {
-        console.warn('[Yahoo]', ticker, json.quoteSummary.error.description);
-        continue;
-      }
-      const result = json?.quoteSummary?.result?.[0] ?? null;
-      if (!result) continue;
-      console.log('[Yahoo]', ticker, '✓ via', host, '— modules:', Object.keys(result).join(', '));
-      _cacheSet(_fmpCache, cacheKey, result, CACHE_TTL_LONG);
-      return result;
-    } catch(e) { continue; }
-  }
-
-  // Fallback: v8 chart endpoint (always open, gives price + basic stats)
   try {
-    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d&includePrePost=false`;
-    const text = await _yahooFetch(chartUrl);
-    if (text) {
-      const json = JSON.parse(text);
-      const meta = json?.chart?.result?.[0]?.meta;
-      if (meta) {
-        // Build a minimal result shaped like quoteSummary
-        const result = {
-          financialData: {
-            currentPrice: meta.regularMarketPrice,
-            targetMeanPrice: null, targetLowPrice: null, targetHighPrice: null,
-          },
-          summaryDetail: {
-            regularMarketPrice: meta.regularMarketPrice,
-            marketCap: meta.marketCap,
-          },
-          defaultKeyStatistics: {},
-        };
-        console.log('[Yahoo]', ticker, '✓ via v8 chart (price only):', meta.regularMarketPrice);
-        _cacheSet(_fmpCache, cacheKey, result, CACHE_TTL_LONG);
-        return result;
-      }
-    }
-  } catch(e) { /* ignore */ }
-
-  console.warn('[Yahoo] all attempts failed for', ticker);
-  return null;
+    const url = `${WORKERS.yahoo}?ticker=${encodeURIComponent(ticker)}&modules=${encodeURIComponent(modules)}`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const text = await res.text();
+    if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + text.slice(0, 80));
+    const json = JSON.parse(text);
+    if (json?.quoteSummary?.error) throw new Error(json.quoteSummary.error.description || 'Yahoo API error');
+    const result = json?.quoteSummary?.result?.[0] ?? null;
+    if (!result) throw new Error('empty result');
+    console.log('[Yahoo]', ticker, '✓ modules:', Object.keys(result).join(', '));
+    _cacheSet(_fmpCache, cacheKey, result, CACHE_TTL_LONG);
+    return result;
+  } catch(e) {
+    console.warn('[Yahoo] failed for', ticker, '—', e.message);
+    return null;
+  }
 }
 
 // Parse a Yahoo raw number (could be {raw, fmt} object or plain number)
