@@ -3922,27 +3922,86 @@ function renderStockDetail(d) {
       + '</div>';
   })() : '';
 
-  const qualHTML = d.scores ? `
-    <div class="stock-detail-card">
-      <div class="stock-card-title">Qualitative Factors</div>
-      <div class="quality-scores-grid">
-        ${QUAL_KEYS.map(c => {
-          const v = +(d.scores[c.key] || 0);
-          if (!v) return '';
-          const barColor = v >= 4 ? '#22c55e' : v >= 3 ? '#f59e0b' : '#ef4444';
-          const reason   = d.scores._reasons?.[c.key] || '';
-          return `<div class="quality-score-item" style="flex-direction:column;align-items:flex-start;gap:3px">
-            <div style="display:flex;align-items:center;gap:8px;width:100%">
-              <span class="quality-score-label">${c.icon} ${c.label}</span>
-              <div class="quality-score-bar-wrap"><div class="quality-score-bar" style="width:${v*20}%;background:${barColor}"></div></div>
-              <span class="quality-score-num">${v}/5</span>
-            </div>
-            ${reason ? `<div style="font-size:10px;color:var(--text-3);padding-left:20px;line-height:1.5">${reason}</div>` : ''}
-          </div>`;
-        }).join('')}
+  const qualHTML = d.scores ? (() => {
+    const activeKeys = QUAL_KEYS.filter(c => +(d.scores[c.key] || 0) > 0);
+    const N = activeKeys.length;
+
+    // ── Radar SVG ────────────────────────────────────────────────────────────
+    const radarSVG = (() => {
+      if (N < 3) return '';
+      const W = 220, H = 220, cx = 110, cy = 110, maxR = 88;
+      const angle = i => (Math.PI * 2 * i / N) - Math.PI / 2;
+      const pt = (i, r) => [cx + r * Math.cos(angle(i)), cy + r * Math.sin(angle(i))];
+
+      // Grid rings
+      const rings = [1,2,3,4,5].map(r => {
+        const pts = activeKeys.map((_, i) => pt(i, maxR * r / 5));
+        return `<polygon points="${pts.map(p=>p.map(v=>v.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="1"/>`;
+      }).join('');
+
+      // Spokes
+      const spokes = activeKeys.map((_, i) => {
+        const [x,y] = pt(i, maxR);
+        return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,.07)" stroke-width="1"/>`;
+      }).join('');
+
+      // Data polygon
+      const dataPts = activeKeys.map((c, i) => pt(i, maxR * (+(d.scores[c.key] || 0)) / 5));
+      const dataPath = dataPts.map((p,i) => (i===0?'M':'L')+p.map(v=>v.toFixed(1)).join(',')).join(' ')+'Z';
+
+      // Labels
+      const labels = activeKeys.map((c, i) => {
+        const [x, y] = pt(i, maxR + 18);
+        const anchor = x < cx - 5 ? 'end' : x > cx + 5 ? 'start' : 'middle';
+        const v = +(d.scores[c.key] || 0);
+        const col = v >= 4 ? '#22c55e' : v >= 3 ? '#f59e0b' : '#ef4444';
+        // split label into icon + short text
+        const short = c.label.split(' ').slice(0,2).join(' ');
+        return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" font-size="9.5" font-family="Inter,sans-serif" fill="rgba(255,255,255,.55)">${c.icon} ${short}</text>
+          <text x="${x.toFixed(1)}" y="${(y+11).toFixed(1)}" text-anchor="${anchor}" font-size="9" font-family="Inter,sans-serif" font-weight="700" fill="${col}">${v}/5</text>`;
+      }).join('');
+
+      // Dot markers on data polygon
+      const dots = dataPts.map((p, i) => {
+        const v = +(d.scores[activeKeys[i].key] || 0);
+        const col = v >= 4 ? '#22c55e' : v >= 3 ? '#f59e0b' : '#ef4444';
+        return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="${col}" stroke="var(--card)" stroke-width="1.5"/>`;
+      }).join('');
+
+      return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible;flex-shrink:0">
+        ${rings}${spokes}
+        <path d="${dataPath}" fill="rgba(79,124,247,.15)" stroke="#4f7cf7" stroke-width="1.8" stroke-linejoin="round"/>
+        ${dots}${labels}
+      </svg>`;
+    })();
+
+    // ── Factor rows ───────────────────────────────────────────────────────────
+    const rows = QUAL_KEYS.map(c => {
+      const v = +(d.scores[c.key] || 0);
+      if (!v) return '';
+      const barColor = v >= 4 ? '#22c55e' : v >= 3 ? '#f59e0b' : '#ef4444';
+      const reason   = d.scores._reasons?.[c.key] || '';
+      return `<div class="quality-score-item" style="flex-direction:column;align-items:flex-start;gap:3px">
+        <div style="display:flex;align-items:center;gap:8px;width:100%">
+          <span class="quality-score-label">${c.icon} ${c.label}</span>
+          <div class="quality-score-bar-wrap"><div class="quality-score-bar" style="width:${v*20}%;background:${barColor}"></div></div>
+          <span class="quality-score-num">${v}/5</span>
+        </div>
+        ${reason ? `<div style="font-size:10px;color:var(--text-3);padding-left:20px;line-height:1.5">${reason}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    return `<div class="stock-detail-card full">
+      <div class="stock-card-title">Qualitative Analysis</div>
+      <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-top:10px">
+        ${radarSVG ? `<div style="display:flex;justify-content:center;align-items:center;padding:10px 0">${radarSVG}</div>` : ''}
+        <div style="flex:1;min-width:200px">
+          <div class="quality-scores-grid">${rows}</div>
+          ${d.qualScore != null ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">Qualitative score: <strong style="color:var(--text)">${d.qualScore}/100</strong></div>` : ''}
+        </div>
       </div>
-      ${d.qualScore != null ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">Qualitative score: <strong style="color:var(--text)">${d.qualScore}/100</strong></div>` : ''}
-    </div>` : '';
+    </div>`;
+  })() : '';
 
   const scoresHTML = (d.scores || d.quantCriteria || d.finalScore)
     ? buildScoreGauge(d)
@@ -4211,6 +4270,8 @@ function renderStockDetail(d) {
       </div>
       <div class="stock-detail-grid">
         ${scoresHTML}
+        ${qualHTML}
+        ${quantHTML}
         ${finHTML}
         ${valHTML}
         ${tgtsHTML}
