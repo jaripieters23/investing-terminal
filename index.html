@@ -2996,7 +2996,7 @@ function renderWatchlistTable() {
       + '</div></td>'
       + '<td class="right wl-td" style="color:' + upsideColor + ';font-weight:600">' + (upside !== null ? (upside > 0 ? '+' : '') + upside + '%' : '<span class="wl-na">—</span>') + '</td>'
       + '<td class="right wl-td" style="white-space:nowrap">'
-      +   '<button class="wl-edit-target-btn" data-name="' + s.name.replace(/"/g,'&quot;') + '" onclick="toggleTargetForm(this.dataset.name)">&#9999; Target</button>'
+      +   '<button class="wl-edit-target-btn" data-name="' + s.name.replace(/"/g,'&quot;') + '" onclick="toggleTargetForm(this.dataset.name)">&#9999; Update</button>'
       +   '&nbsp;<button class="wl-remove-btn" onclick="removeFromWatchlist(\'' + nameEsc + '\')">✕</button>'
       + '</td>'
       + '</tr>'
