@@ -729,8 +729,8 @@ let perfChartInst = null;
 let watchlist = (() => { try { return JSON.parse(localStorage.getItem('watchlist') || '[]'); } catch { return []; } })();
 
 // Manual quant overrides: { "Company Name": { revGrowth: {hist:12,fwd:8}, epsGrowth: {hist:15,fwd:10}, fcfConv: 92, netMargin: 18, roic: 22, netDebtEbitda: 1.5 } }
-let _manualOverrides = (() => { try { return JSON.parse(localStorage.getItem('manualOverrides') || '{}'); } catch { return {}; } })();
-function saveManualOverrides() { try { localStorage.setItem('manualOverrides', JSON.stringify(_manualOverrides)); } catch {} }
+let _manualOverrides = (() => { try { return JSON.parse(localStorage.getItem('pa_manualOverrides') || localStorage.getItem('manualOverrides') || '{}'); } catch { return {}; } })();
+function saveManualOverrides() { try { localStorage.setItem('pa_manualOverrides', JSON.stringify(_manualOverrides)); localStorage.removeItem('manualOverrides'); } catch {} }
 let wlSortKey = 'score';
 let wlSortDir = -1;
 let scanQueue = [];
@@ -3957,6 +3957,32 @@ function applyManualOverrides(name, quantCriteria) {
   });
 }
 
+// Build a skeleton quantCriteria from saved overrides when no scan data is available
+// (e.g. after reload, opening a watchlist stock that was never re-scanned)
+function buildQuantCriteriaFromOverrides(name) {
+  const overrides = _manualOverrides[name.toLowerCase()];
+  if (!overrides || !Object.keys(overrides).length) return null;
+
+  const SKELETON = [
+    { key:'revGrowth',    label:'Revenue Growth > 9% (5Y CAGR), > 7% (fwd)', icon:'🚀' },
+    { key:'epsGrowth',    label:'EPS Growth > 12% (hist 5Y), fwd 2Y CAGR > 9%', icon:'💹' },
+    { key:'fcfConv',      label:'FCF / Net Income > 80%', icon:'🔄' },
+    { key:'netMargin',    label:'Profit Margin > 10%', icon:'📈' },
+    { key:'roic',         label:'ROIC > 15%', icon:'💰' },
+    { key:'netDebtEbitda',label:'Net Debt / EBITDA < 3x', icon:'🏦' },
+  ];
+
+  const criteria = SKELETON.map(s => ({
+    ...s,
+    pass:      null,
+    value:     null,
+    nullReason: 'No scan data — run a scan to fetch live data, or use manual entry below',
+    _origNullReason: 'No scan data',
+  }));
+
+  return applyManualOverrides(name, criteria);
+}
+
 function recalcQuantScore(quantCriteria) {
   if (!quantCriteria) return { quantScore: null, quantMissing: 0 };
   const withData  = quantCriteria.filter(q => q.pass !== null);
@@ -4273,24 +4299,34 @@ function buildStockDetailData(name, scanData, realData, aiData, realError) {
     } : null),
     quantCriteria: (() => {
       const base = scanData?.quantCriteria || null;
-      if (!base) return null;
-      const withOrigReasons = base.map(q => ({ ...q, _origNullReason: q.nullReason }));
-      return applyManualOverrides(name, withOrigReasons);
+      if (base) {
+        const withOrigReasons = base.map(q => ({ ...q, _origNullReason: q.nullReason }));
+        return applyManualOverrides(name, withOrigReasons);
+      }
+      // No scan data — reconstruct from saved overrides so manual entries survive reload
+      return buildQuantCriteriaFromOverrides(name);
     })(),
     quantScore: (() => {
-      const base = scanData?.quantCriteria || null;
+      const base = scanData?.quantCriteria || buildQuantCriteriaFromOverrides(name);
       if (!base) return scanData?.quantScore || null;
       const patched = applyManualOverrides(name, base);
       return recalcQuantScore(patched).quantScore ?? scanData?.quantScore ?? null;
     })(),
     quantMissing: (() => {
-      const base = scanData?.quantCriteria || null;
+      const base = scanData?.quantCriteria || buildQuantCriteriaFromOverrides(name);
       if (!base) return scanData?.quantMissing ?? 0;
       const patched = applyManualOverrides(name, base);
       return recalcQuantScore(patched).quantMissing;
     })(),
     qualScore:     scanData?.qualScore     || null,
-    finalScore:    scanData?.finalScore    || null,
+    finalScore: (() => {
+      const qs = scanData?.quantScore ?? null;
+      const ql = scanData?.qualScore  ?? null;
+      const sf = scanData?.finalScore ?? null;
+      if (sf != null) return sf;
+      if (qs != null && ql != null) return Math.round(qs * 0.6 + ql * 0.4);
+      return ql ?? qs ?? null;
+    })(),
     totalScore:    scanData?.totalScore    || null,
     verdict:       scanData?.verdict       || null,
     bullCase:    aiData?.bullCase      || [],
@@ -4836,11 +4872,9 @@ const LS = {
 };
 
 function persistAll() {
-  // Keys stored in Cloudflare Workers, not in app
-  // Settings
   LS.set('settings', _settings);
-  // Watchlist (already saved per-change but keep in sync)
   LS.set('watchlist', watchlist);
+  LS.set('manualOverrides', _manualOverrides);
 }
 
 function persistPortfolio() {
@@ -4850,15 +4884,12 @@ function persistPortfolio() {
 }
 
 function restoreAll() {
-  // Keys
-  // Keys stored in Cloudflare Workers — nothing to restore
-  // Settings
   const s = LS.get('settings');
   if (s) Object.assign(_settings, s);
-  // Watchlist
   const wl = LS.get('watchlist');
   if (wl && Array.isArray(wl)) watchlist = wl;
-  // Portfolio
+  const mo = LS.get('manualOverrides');
+  if (mo && typeof mo === 'object') Object.assign(_manualOverrides, mo);
   const pr = LS.get('portfolioRows');
   if (pr && Array.isArray(pr) && pr.length) {
     portfolioRows = pr;
