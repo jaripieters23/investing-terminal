@@ -5131,7 +5131,7 @@ async function _sbRequest(method, body) {
       'apikey': key,
       'Authorization': 'Bearer ' + key,
       'Content-Type': 'application/json',
-      'Prefer': method === 'POST' ? 'resolution=merge-duplicates' : '',
+      'Prefer': method === 'POST' ? 'resolution=merge-duplicates,return=minimal' : 'return=minimal',
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -5139,7 +5139,10 @@ async function _sbRequest(method, body) {
     const err = await res.text();
     throw new Error('Supabase ' + res.status + ': ' + err.slice(0, 120));
   }
-  return res.status === 204 ? null : res.json();
+  // 204 and 201 with return=minimal both have empty bodies — don't parse
+  const text = await res.text();
+  if (!text || !text.trim()) return null;
+  try { return JSON.parse(text); } catch { return null; }
 }
 
 async function supabasePush() {
