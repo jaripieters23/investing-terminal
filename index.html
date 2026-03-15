@@ -266,6 +266,18 @@ td{padding:8px 16px;vertical-align:middle}
 .wl-bar-dot{position:absolute;top:50%;transform:translateY(-50%);width:8px;height:8px;border-radius:50%;margin-left:-4px}
 .wl-remove-btn{padding:2px 8px;border-radius:5px;border:1px solid transparent;background:transparent;color:var(--text-3);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif}
 .wl-remove-btn:hover{border-color:var(--red);color:var(--red)}
+.wl-edit-target-btn{padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text-3);font-size:10px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
+.wl-edit-target-btn:hover{border-color:var(--blue);color:var(--blue)}
+.wl-target-info{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(79,124,247,.15);color:var(--blue);font-size:9px;font-weight:700;cursor:default;position:relative;margin-left:4px;vertical-align:middle}
+.wl-target-info:hover::after{content:attr(data-tip);position:absolute;right:0;top:18px;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:10px;color:var(--text-2);white-space:nowrap;z-index:100;pointer-events:none;font-weight:400;line-height:1.5}
+.wl-target-row td{padding:0 !important}
+.wl-target-form{display:flex;align-items:center;gap:8px;padding:10px 14px;flex-wrap:wrap}
+.wl-target-input{background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;padding:4px 8px;width:82px;font-family:'Inter',sans-serif}
+.wl-target-input:focus{outline:none;border-color:var(--blue)}
+.wl-target-save{font-size:11px;padding:4px 12px;background:var(--blue);color:#fff;border:none;border-radius:5px;cursor:pointer}
+.wl-target-save:hover{opacity:.85}
+.wl-target-clear{font-size:11px;padding:4px 10px;background:transparent;color:var(--text-3);border:1px solid var(--border);border-radius:5px;cursor:pointer}
+.wl-target-clear:hover{color:var(--red);border-color:var(--red)}
 .mobile-nav-badge{position:absolute;top:2px;right:2px;width:7px;height:7px;background:var(--amber);border-radius:50%}
 .stock-detail-topbar{position:sticky;top:0;z-index:40;background:var(--bg);border-bottom:1px solid var(--border);padding:0 20px;height:48px;display:flex;align-items:center;gap:10px}
 .stock-back-btn{padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text-2);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s;white-space:nowrap}
@@ -2195,13 +2207,43 @@ const INDEXES = {
   STOXX50:  ['ASML','SAP','LVMH','TotalEnergies','Siemens','Allianz','Sanofi','L\'Oréal','Hermès','Airbus','BNP Paribas','AXA','Air Liquide','Schneider Electric','Novo Nordisk','Iberdrola','Intesa Sanpaolo','Deutsche Telekom','Munich Re','EssilorLuxottica'],
 };
 
+// Returns true if the stock name/ticker is already on watchlist or in portfolio.
+// `force` allows explicit override (e.g. for refresh from detail page).
+function _isAlreadyTracked(name) {
+  const q = name.toLowerCase();
+  if (watchlist.some(w => w.name.toLowerCase() === q || (w.ticker || '').toLowerCase() === q)) return 'watchlist';
+  if (portfolioRows && portfolioRows.some(r => r.product.toLowerCase().includes(q) || q.includes(r.product.toLowerCase().split(' ')[0]))) return 'portfolio';
+  return false;
+}
+
 function addToQueue() {
   const inp = document.getElementById('scan-input');
   const val = inp.value.trim().toUpperCase().replace(/\s+/g, '');
-  if (!val || scanQueue.includes(val)) { inp.value = ''; return; }
+  if (!val) { inp.value = ''; return; }
+  if (scanQueue.includes(val)) { inp.value = ''; return; }
+  const tracked = _isAlreadyTracked(val);
+  if (tracked) {
+    showScanSkipToast(val + ' is already on your ' + tracked + ' — skipping');
+    inp.value = '';
+    return;
+  }
   scanQueue.push(val);
   inp.value = '';
   renderQueue();
+}
+
+function showScanSkipToast(msg) {
+  let toast = document.getElementById('scan-skip-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'scan-skip-toast';
+    toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);color:var(--text-2);font-size:12px;padding:8px 16px;border-radius:8px;z-index:999;pointer-events:none;transition:opacity .3s';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 2500);
 }
 
 function removeFromQueue(name) {
@@ -2218,8 +2260,16 @@ function renderQueue() {
 function loadPreset(key) {
   const stocks = PRESETS[key]();
   if (!stocks.length) { alert('Upload your portfolio file first, then use "My portfolio stocks".'); return; }
-  scanQueue = [...new Set([...scanQueue, ...stocks])].slice(0, 30);
+  const skipped = [];
+  const toAdd = stocks.filter(s => {
+    if (scanQueue.includes(s)) return false;
+    const tracked = _isAlreadyTracked(s);
+    if (tracked) { skipped.push(s); return false; }
+    return true;
+  });
+  scanQueue = [...new Set([...scanQueue, ...toAdd])].slice(0, 30);
   renderQueue();
+  if (skipped.length) showScanSkipToast(skipped.length + ' already-tracked stock(s) skipped');
 }
 
 async function scoreStock(name) {
@@ -2415,7 +2465,7 @@ Respond ONLY with this exact JSON structure:
   };
 }
 
-async function runScan() {
+async function runScan(forceAll) {
   // No key check needed — Groq worker handles auth
   if (!scanQueue.length) return;
   const btn = document.getElementById('scan-run-btn');
@@ -2423,8 +2473,27 @@ async function runScan() {
   btn.innerHTML = '<span class="spinner"></span> Scanning…';
   scanResults = [];
   const resultsEl = document.getElementById('scan-results');
-  resultsEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">Scoring stocks with Groq AI…</div>';
-  const queue = [...scanQueue];
+
+  // Filter out already-tracked unless forceAll is set
+  let queue = [...scanQueue];
+  if (!forceAll) {
+    const filtered = queue.filter(name => !_isAlreadyTracked(name));
+    const skippedCount = queue.length - filtered.length;
+    queue = filtered;
+    if (skippedCount > 0 && !filtered.length) {
+      resultsEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">All ' + skippedCount + ' stock(s) are already on your watchlist or portfolio — nothing to scan.</div>';
+      btn.disabled = false;
+      btn.innerHTML = 'Scan &#9654;';
+      return;
+    }
+    if (skippedCount > 0) {
+      resultsEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">Skipping ' + skippedCount + ' already-tracked stock(s) — scanning ' + filtered.length + ' remaining…</div>';
+    } else {
+      resultsEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">Scoring stocks with Groq AI…</div>';
+    }
+  } else {
+    resultsEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">Scoring stocks with Groq AI…</div>';
+  }
   const concurrency = _settings.concurrency || 3;
   let i = 0;
   async function next() {
@@ -2859,26 +2928,138 @@ function renderWatchlistTable() {
   const sym = s => s === 'USD' ? '$' : s === 'GBP' ? '£' : '€';
   tbody.innerHTML = sorted.map(s => {
     const verdictCls = s.verdict === 'BUY' ? 'wl-buy' : s.verdict === 'WATCH' ? 'wl-watch' : 'wl-pass';
-    const upside = s.currentPrice && s.targetMean ? ((s.targetMean - s.currentPrice) / s.currentPrice * 100).toFixed(1) : null;
+
+    // Prefer manual targets over analyst targets
+    const tLow  = s.manualTargetLow  ?? s.targetLow  ?? null;
+    const tMean = s.manualTargetMean ?? s.targetMean ?? null;
+    const tHigh = s.manualTargetHigh ?? s.targetHigh ?? null;
+    const isManual = s.manualTargetLow != null || s.manualTargetMean != null || s.manualTargetHigh != null;
+
+    const upside = s.currentPrice && tMean ? ((tMean - s.currentPrice) / s.currentPrice * 100).toFixed(1) : null;
     const upsideColor = upside > 0 ? 'var(--green)' : 'var(--red)';
+
     // Price range bar
     let barHTML = '<span class="wl-na">—</span>';
-    if (s.currentPrice && s.targetLow && s.targetHigh) {
-      const range = s.targetHigh - s.targetLow;
-      const pos   = range > 0 ? Math.min(100, Math.max(0, (s.currentPrice - s.targetLow) / range * 100)) : 50;
-      const dotColor = s.currentPrice < s.targetLow ? 'var(--green)' : s.currentPrice < s.targetMean ? 'var(--amber)' : 'var(--red)';
-      barHTML = `<div class="wl-bar-wrap"><div class="wl-bar-range" style="left:0;width:100%"></div><div class="wl-bar-dot" style="left:${pos}%;background:${dotColor}"></div></div>`;
+    if (s.currentPrice && tLow && tHigh) {
+      const range   = tHigh - tLow;
+      const pos     = range > 0 ? Math.min(100, Math.max(0, (s.currentPrice - tLow) / range * 100)) : 50;
+      const dotColor = s.currentPrice < tLow ? 'var(--green)' : s.currentPrice < tMean ? 'var(--amber)' : 'var(--red)';
+      barHTML = '<div class="wl-bar-wrap"><div class="wl-bar-range" style="left:0;width:100%"></div><div class="wl-bar-dot" style="left:' + pos + '%;background:' + dotColor + '"></div></div>';
     }
-    return `<tr>
-      <td class="wl-td"><div class="holding-name stock-link" onclick="showStockDetail('${s.name.replace(/'/g,"\\'")}','watchlist')">${s.name}</div><div class="holding-isin">${s.ticker || '—'}</div></td>
-      <td class="right wl-td" style="font-weight:600;color:${s.totalScore>=7.5?'var(--green)':s.totalScore>=5.5?'var(--amber)':'var(--text-3)'}">${s.totalScore.toFixed(1)}</td>
-      <td class="right wl-td"><span class="wl-verdict ${verdictCls}">${s.verdict}</span></td>
-      <td class="right wl-td private">${s.currentPrice ? (sym(s.currency)+s.currentPrice.toFixed(2)) : '<span class="wl-na">—</span>'}</td>
-      <td class="right wl-td">${barHTML}</td>
-      <td class="right wl-td" style="color:${upsideColor};font-weight:600">${upside !== null ? (upside > 0 ? '+' : '') + upside + '%' : '<span class="wl-na">—</span>'}</td>
-      <td class="right wl-td"><button class="wl-remove-btn" onclick="removeFromWatchlist('${s.name.replace(/'/g,"\\'")}')">✕</button></td>
-    </tr>`;
+
+    // Info badge for manual targets
+    let infoBadge = '';
+    if (isManual && s.manualTargetUpdatedAt) {
+      const d = new Date(s.manualTargetUpdatedAt);
+      const fmt = d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+      const tip = 'Manual target · Updated ' + fmt;
+      infoBadge = '<span class="wl-target-info" data-tip="' + tip + '">i</span>';
+    } else if (isManual) {
+      infoBadge = '<span class="wl-target-info" data-tip="Manual target">i</span>';
+    }
+
+    const nameEsc = s.name.replace(/'/g, "\\'");
+    const sym2 = s.currency === 'USD' ? '$' : s.currency === 'GBP' ? '£' : '€';
+
+    return '<tr id="wl-row-' + nameEsc + '">'
+      + '<td class="wl-td"><div class="holding-name stock-link" onclick="showStockDetail(\'' + nameEsc + '\',\'watchlist\')">' + s.name + '</div>'
+      + '<div class="holding-isin">' + (s.ticker || '—') + '</div></td>'
+      + '<td class="right wl-td" style="font-weight:600;color:' + (s.totalScore>=7.5?'var(--green)':s.totalScore>=5.5?'var(--amber)':'var(--text-3)') + '">' + s.totalScore.toFixed(1) + '</td>'
+      + '<td class="right wl-td"><span class="wl-verdict ' + verdictCls + '">' + s.verdict + '</span></td>'
+      + '<td class="right wl-td private">' + (s.currentPrice ? (sym2+s.currentPrice.toFixed(2)) : '<span class="wl-na">—</span>') + '</td>'
+      + '<td class="right wl-td"><div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">'
+      +   barHTML
+      +   (tMean ? '<span style="font-size:10px;color:var(--text-3);margin-left:4px">' + sym2 + tMean.toFixed(0) + '</span>' : '')
+      +   infoBadge
+      + '</div></td>'
+      + '<td class="right wl-td" style="color:' + upsideColor + ';font-weight:600">' + (upside !== null ? (upside > 0 ? '+' : '') + upside + '%' : '<span class="wl-na">—</span>') + '</td>'
+      + '<td class="right wl-td" style="white-space:nowrap">'
+      +   '<button class="wl-edit-target-btn" data-name="' + s.name.replace(/"/g,'&quot;') + '" onclick="toggleTargetForm(this.dataset.name)">&#9999; Target</button>'
+      +   '&nbsp;<button class="wl-remove-btn" onclick="removeFromWatchlist(\'' + nameEsc + '\')">✕</button>'
+      + '</td>'
+      + '</tr>'
+      + '<tr class="wl-target-row" id="wl-target-form-' + s.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'') + '" style="display:none">'
+      + '<td colspan="7"><div class="wl-target-form" id="wl-target-form-inner-' + s.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'') + '"></div></td>'
+      + '</tr>';
   }).join('');
+}
+
+
+function _wlSafeId(name) {
+  return name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+}
+
+function toggleTargetForm(name) {
+  const sid  = _wlSafeId(name);
+  const row  = document.getElementById('wl-target-form-' + sid);
+  const inner= document.getElementById('wl-target-form-inner-' + sid);
+  if (!row || !inner) return;
+  const open = row.style.display !== 'none';
+  if (open) { row.style.display = 'none'; return; }
+
+  const s = watchlist.find(w => w.name === name);
+  if (!s) return;
+  const sym = s.currency === 'USD' ? '$' : s.currency === 'GBP' ? '£' : '€';
+  const tLow  = s.manualTargetLow  ?? '';
+  const tMean = s.manualTargetMean ?? '';
+  const tHigh = s.manualTargetHigh ?? '';
+  const hasManual = s.manualTargetLow != null || s.manualTargetMean != null;
+
+  inner.innerHTML =
+    '<span style="font-size:11px;color:var(--text-3);margin-right:4px">Manual targets (' + sym + '):</span>'
+    + '<div style="display:flex;align-items:center;gap:4px">'
+    +   '<span style="font-size:10px;color:var(--text-3)">Low</span>'
+    +   '<input class="wl-target-input" id="wlt-low-' + sid + '" type="number" step="0.01" placeholder="e.g. 120" value="' + tLow + '">'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:4px">'
+    +   '<span style="font-size:10px;color:var(--text-3)">Mean</span>'
+    +   '<input class="wl-target-input" id="wlt-mean-' + sid + '" type="number" step="0.01" placeholder="e.g. 150" value="' + tMean + '">'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:4px">'
+    +   '<span style="font-size:10px;color:var(--text-3)">High</span>'
+    +   '<input class="wl-target-input" id="wlt-high-' + sid + '" type="number" step="0.01" placeholder="e.g. 180" value="' + tHigh + '">'
+    + '</div>'
+    + '<button class="wl-target-save" onclick="saveManualTarget(' + JSON.stringify(name) + ')">Save</button>'
+    + (hasManual ? '<button class="wl-target-clear" onclick="clearManualTarget(' + JSON.stringify(name) + ')">Clear</button>' : '')
+    + '<button class="wl-target-clear" onclick="toggleTargetForm(' + JSON.stringify(name) + ')">Cancel</button>';
+
+  row.style.display = '';
+  setTimeout(() => { const el = document.getElementById('wlt-low-' + sid); if (el) el.focus(); }, 50);
+}
+
+function saveManualTarget(name) {
+  const sid  = _wlSafeId(name);
+  const low  = parseFloat(document.getElementById('wlt-low-'  + sid)?.value) || null;
+  const mean = parseFloat(document.getElementById('wlt-mean-' + sid)?.value) || null;
+  const high = parseFloat(document.getElementById('wlt-high-' + sid)?.value) || null;
+
+  const idx = watchlist.findIndex(w => w.name === name);
+  if (idx < 0) return;
+
+  watchlist[idx].manualTargetLow  = low;
+  watchlist[idx].manualTargetMean = mean;
+  watchlist[idx].manualTargetHigh = high;
+  watchlist[idx].manualTargetUpdatedAt = new Date().toISOString();
+
+  // Recompute verdict based on new targets
+  const s = watchlist[idx];
+  if (s.currentPrice && (low || mean)) {
+    s.verdict = s.currentPrice < (low || mean) ? 'BUY' : s.currentPrice < mean ? 'WATCH' : 'PASS';
+  }
+
+  saveWatchlist(); // triggers auto-push to Supabase
+  renderWatchlistTable();
+}
+
+function clearManualTarget(name) {
+  const idx = watchlist.findIndex(w => w.name === name);
+  if (idx < 0) return;
+  delete watchlist[idx].manualTargetLow;
+  delete watchlist[idx].manualTargetMean;
+  delete watchlist[idx].manualTargetHigh;
+  delete watchlist[idx].manualTargetUpdatedAt;
+  saveWatchlist();
+  renderWatchlistTable();
 }
 
 async function refreshWatchlist() {
