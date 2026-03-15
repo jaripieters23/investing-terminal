@@ -2962,10 +2962,16 @@ function renderWatchlistTable() {
 
     // Info badge for manual targets — must be before targetCell
     let infoBadge = '';
+    let targetStale = false;
     if (isManual && s.manualTargetUpdatedAt) {
       const d = new Date(s.manualTargetUpdatedAt);
       const fmt = d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
-      infoBadge = '<span class="wl-target-info" data-tip="Manual target · Updated ' + fmt + '">i</span>';
+      const ageMs = Date.now() - d.getTime();
+      targetStale = ageMs > 14 * 24 * 60 * 60 * 1000; // older than 2 weeks
+      const tip = 'Manual target · Updated ' + fmt + (targetStale ? ' · ⚠ Outdated (>2 weeks)' : '');
+      const badgeBg = targetStale ? 'rgba(239,68,68,.15)' : 'rgba(79,124,247,.15)';
+      const badgeColor = targetStale ? 'var(--red)' : 'var(--blue)';
+      infoBadge = '<span class="wl-target-info" data-tip="' + tip + '" style="background:' + badgeBg + ';color:' + badgeColor + '">i</span>';
     } else if (isManual) {
       infoBadge = '<span class="wl-target-info" data-tip="Manual target">i</span>';
     }
@@ -2974,10 +2980,11 @@ function renderWatchlistTable() {
     const upside = s.currentPrice && tLow ? ((tLow - s.currentPrice) / s.currentPrice * 100).toFixed(1) : null;
     const upsideColor = upside > 0 ? 'var(--green)' : 'var(--red)';
 
-    // Target cell: just show the low target value
+    // Target cell: red if stale (>2 weeks), normal otherwise
+    const targetColor = targetStale ? 'var(--red)' : 'var(--text)';
     const targetCell = tLow
       ? '<div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">'
-        + '<span style="font-size:13px;font-weight:600;color:var(--text)">' + sym2 + tLow.toFixed(2) + '</span>'
+        + '<span style="font-size:13px;font-weight:600;color:' + targetColor + '">' + sym2 + tLow.toFixed(2) + '</span>'
         + infoBadge + '</div>'
       : '<span class="wl-na">—</span>';
 
