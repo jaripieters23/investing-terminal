@@ -70,6 +70,8 @@ html{overflow-x:hidden;max-width:100vw}body{display:flex;flex-direction:column;o
 #stock-page{display:none;flex:1;overflow-y:auto;background:var(--bg)}
 #pnl-page{display:none;flex:1;overflow-y:auto;background:var(--bg)}
 #news-page{display:none;flex-direction:column;background:var(--bg);height:calc(100vh - var(--header-h));box-sizing:border-box}
+#news-page .news-scroll{scrollbar-width:none}
+#news-page .news-scroll::-webkit-scrollbar{display:none}
 #upload-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;flex:1;gap:16px}
 #upload-screen h2{font-size:20px;font-weight:600}
 #upload-screen p{font-size:13px;color:var(--text-3);max-width:360px;line-height:1.6}
@@ -427,7 +429,7 @@ input,textarea,select{font-size:16px!important}
 html{scroll-padding-top:var(--header-h)}
 #dashboard{padding:calc(var(--header-h) + 14px) 14px calc(70px + env(safe-area-inset-bottom,0px));min-height:100vh;background:var(--bg)}
 #scan-page,#watchlist-page,#settings-page,#pnl-page{padding-top:calc(var(--header-h) + 8px);padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}
-#news-page{padding-bottom:calc(70px + env(safe-area-inset-bottom,0px));height:calc(100vh - var(--header-h));box-sizing:border-box}
+#news-page{padding-bottom:0;height:calc(100vh - var(--header-h) - 60px - env(safe-area-inset-bottom,0px));box-sizing:border-box}
   #upload-screen{padding-bottom:calc(80px + env(safe-area-inset-bottom,0px))}
 .scan-header{padding:8px 14px 0}.scan-controls{margin:12px 14px 0;grid-template-columns:1fr auto}.scan-btn.secondary{grid-column:1/-1}
 #scan-queue{margin:10px 14px 0}#scan-results{padding:12px 14px 80px}
@@ -2590,11 +2592,11 @@ async function renderNewsPage() {
 
       <!-- body: sidebar + articles, fills remaining height -->
       <div style="flex:1;display:flex;overflow:hidden;min-height:0">
-        <div id="news-feed-list"
+        <div id="news-feed-list" class="news-scroll"
           style="width:176px;flex-shrink:0;border-right:1px solid var(--border);
                  overflow-y:auto;padding:14px 8px;background:var(--card)">
         </div>
-        <div id="news-article-list"
+        <div id="news-article-list" class="news-scroll"
           style="flex:1;overflow-y:auto;padding:0 32px 40px;max-width:860px">
         </div>
       </div>
@@ -2611,19 +2613,22 @@ function _renderNewsFeedList() {
   if (!list) return;
   const feeds = NEWS_FEEDS.filter(f => f.category === _newsActiveCategory);
   list.innerHTML = '<div style="font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;padding:2px 8px 10px">Sources</div>'
-    + feeds.map(f => {
+    + feeds.map((f, idx) => {
         const safeId = f.name.replace(/\s/g,'_');
         const isActive = _newsActiveFeed?.name === f.name;
+        // Use data attribute + event delegation to avoid any quote issues in onclick
         return '<div id="news-feed-btn-' + safeId + '"'
           + ' class="news-feed-btn' + (isActive ? ' active' : '') + '"'
-          + ' onclick="newsSelectFeedByName(' + JSON.stringify(f.name) + ')">'
+          + ' data-feedidx="' + idx + '"'
+          + ' onclick="newsSelectFeedByIdx(+this.dataset.feedidx)">'
           + f.name + '</div>';
       }).join('');
 }
 
-async function newsSelectFeedByName(name) {
-  const feed = NEWS_FEEDS.find(f => f.name === name);
-  if (feed) await newsSelectFeed(feed);
+function newsSelectFeedByIdx(idx) {
+  const feeds = NEWS_FEEDS.filter(f => f.category === _newsActiveCategory);
+  const feed = feeds[idx];
+  if (feed) newsSelectFeed(feed);
 }
 
 async function newsSetCategory(cat) {
