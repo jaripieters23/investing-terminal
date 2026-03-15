@@ -714,7 +714,7 @@ html{scroll-padding-top:var(--header-h)}
         </div>
         <div class="settings-row-control">
           <button class="settings-save-btn secondary" onclick="supabasePushLocalFiles().then(()=>_updateSyncStatus('✓ Files pushed'))">Push files</button>
-          <button class="settings-save-btn secondary" onclick="supabasePullFiles().then(loaded=>{if(loaded){persistPortfolio();renderDashboard();_updateSyncStatus('✓ Files pulled');}else{_updateSyncStatus('No new files in cloud');}})">Pull files</button>
+          <button class="settings-save-btn secondary" onclick="(async()=>{showLoader('Pulling files…','Restoring from cloud');const loaded=await supabasePullFiles().catch(()=>false);hideLoader();if(loaded){persistPortfolio();renderDashboard();_updateSyncStatus('✓ Files pulled');}else{_updateSyncStatus('No new files in cloud');}})()">Pull files</button>
         </div>
       </div>
     </div>
@@ -1176,8 +1176,10 @@ wireInput('settings-tx-input',       f => handleTxFile(f));
 wireInput('settings-acct-input',     f => handleAcctFile(f));
 
 async function handlePortfolioFile(file) {
+  showLoader('Loading portfolio…', 'Parsing ' + file.name);
   const [rows, b64] = await Promise.all([readXLSX(file), fileToBase64(file)]);
   portfolioRows = parsePortfolio(rows);
+  hideLoader();
   if (!portfolioRows.length) { alert('Could not parse portfolio file. Please check the format.'); return; }
   LS.set('file_portfolio_b64', b64);
   supabasePushFile('portfolio', b64).catch(() => {});
@@ -5489,7 +5491,9 @@ try {
       // Pull watchlist
       await supabasePull().catch(() => {});
       // Pull files — if new files loaded, re-render dashboard
+      showLoader('Syncing from cloud…', 'Restoring your portfolio files');
       const filesLoaded = await supabasePullFiles().catch(() => false);
+      hideLoader();
       if (filesLoaded && portfolioRows && portfolioRows.length) {
         persistPortfolio();
         if (document.getElementById('upload-screen').style.display !== 'none') {
@@ -5500,7 +5504,7 @@ try {
         renderDashboard();
         _updateSyncStatus('✓ Files & watchlist restored from cloud');
       }
-    } catch(e) { console.warn('[Supabase init pull]', e); }
+    } catch(e) { hideLoader(); console.warn('[Supabase init pull]', e); }
   }, 800);
 } catch(e) {
   console.error('[INIT CRASH]', e);
