@@ -3022,29 +3022,60 @@ function openTargetModal(name) {
   document.getElementById('target-modal-title').textContent = s.name;
   document.getElementById('target-modal-sub').textContent   = (s.ticker || '') + (s.currency ? ' · ' + s.currency : '');
 
-  const inputStyle = 'width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:8px 10px;font-family:\'Inter\',sans-serif;box-sizing:border-box';
-  const labelStyle = 'font-size:11px;color:var(--text-3);margin-bottom:5px;display:block';
-  const groupStyle = 'margin-bottom:16px';
+  const body = document.getElementById('target-modal-body');
+  body.innerHTML = '';
 
-  document.getElementById('target-modal-body').innerHTML =
-    '<div style="' + groupStyle + '">'
-    +   '<label style="' + labelStyle + '">Current Price (' + sym + ') — manual override</label>'
-    +   '<input id="tmod-price" type="number" step="0.01" placeholder="e.g. 145.50" value="' + tPrice + '" style="' + inputStyle + '">'
-    +   '<div style="font-size:10px;color:var(--text-3);margin-top:4px">Leave blank to use live price from API</div>'
-    + '</div>'
-    + '<div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:12px;font-size:11px;font-weight:600;color:var(--text-2)">Analyst / Personal Price Targets (' + sym + ')</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'
-    +   '<div><label style="' + labelStyle + '">Low</label><input id="tmod-low" type="number" step="0.01" placeholder="e.g. 120" value="' + tLow + '" style="' + inputStyle + '"></div>'
-    +   '<div><label style="' + labelStyle + '">Mean</label><input id="tmod-mean" type="number" step="0.01" placeholder="e.g. 150" value="' + tMean + '" style="' + inputStyle + '"></div>'
-    +   '<div><label style="' + labelStyle + '">High</label><input id="tmod-high" type="number" step="0.01" placeholder="e.g. 180" value="' + tHigh + '" style="' + inputStyle + '"></div>'
-    + '</div>'
-    + (hasManual ? '<button class="wl-target-clear" style="margin-top:4px" onclick="clearManualTarget(' + JSON.stringify(name) + ');closeTargetModal()">Clear all manual values</button>' : '');
+  const iStyle = 'width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:8px 10px;font-family:Inter,sans-serif;box-sizing:border-box';
+  const lStyle = 'font-size:11px;color:var(--text-3);margin-bottom:5px;display:block';
+
+  function mkInput(id, lbl, val, ph) {
+    const wrap = document.createElement('div');
+    const l = document.createElement('label');
+    l.style.cssText = lStyle; l.textContent = lbl;
+    const inp = document.createElement('input');
+    inp.id = id; inp.type = 'number'; inp.step = '0.01';
+    inp.placeholder = ph; inp.value = val; inp.style.cssText = iStyle;
+    wrap.append(l, inp);
+    return wrap;
+  }
+
+  // Current price
+  const priceWrap = mkInput('tmod-price', 'Current Price (' + sym + ') — manual override', tPrice, 'e.g. 145.50');
+  const hint = document.createElement('div');
+  hint.style.cssText = 'font-size:10px;color:var(--text-3);margin-top:4px';
+  hint.textContent = 'Leave blank to use live price from API';
+  priceWrap.style.marginBottom = '16px';
+  priceWrap.appendChild(hint);
+
+  // Targets header
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'border-top:1px solid var(--border);padding-top:16px;margin-bottom:12px;font-size:11px;font-weight:600;color:var(--text-2)';
+  hdr.textContent = 'Price Targets (' + sym + ')';
+
+  // Targets grid
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px';
+  grid.append(
+    mkInput('tmod-low',  'Low',  tLow,  'e.g. 120'),
+    mkInput('tmod-mean', 'Mean', tMean, 'e.g. 150'),
+    mkInput('tmod-high', 'High', tHigh, 'e.g. 180')
+  );
+
+  body.append(priceWrap, hdr, grid);
+
+  if (hasManual) {
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'wl-target-clear';
+    clearBtn.style.marginTop = '4px';
+    clearBtn.textContent = 'Clear all manual values';
+    clearBtn.onclick = function() { clearManualTarget(name); closeTargetModal(); };
+    body.appendChild(clearBtn);
+  }
 
   document.getElementById('target-modal-backdrop').classList.add('open');
   document.getElementById('target-modal').classList.add('open');
   setTimeout(() => { document.getElementById('tmod-price')?.focus(); }, 50);
 }
-
 function closeTargetModal() {
   document.getElementById('target-modal-backdrop').classList.remove('open');
   document.getElementById('target-modal').classList.remove('open');
