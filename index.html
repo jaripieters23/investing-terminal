@@ -703,8 +703,18 @@ html{scroll-padding-top:var(--header-h)}
           <span id="supabase-sync-status">Checking…</span>
         </div>
         <div class="settings-row-control">
-          <button class="settings-save-btn secondary" onclick="supabasePush()">Push</button>
-          <button class="settings-save-btn secondary" onclick="supabasePull()">Pull</button>
+          <button class="settings-save-btn secondary" onclick="supabasePush()">Push watchlist</button>
+          <button class="settings-save-btn secondary" onclick="supabasePull()">Pull watchlist</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <strong>Portfolio files</strong>
+          <span>Sync your Excel files across devices. Files are stored as encrypted base64 in Supabase.</span>
+        </div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" onclick="supabasePushLocalFiles().then(()=>_updateSyncStatus('✓ Files pushed'))">Push files</button>
+          <button class="settings-save-btn secondary" onclick="supabasePullFiles().then(loaded=>{if(loaded){persistPortfolio();renderDashboard();_updateSyncStatus('✓ Files pulled');}else{_updateSyncStatus('No new files in cloud');}})">Pull files</button>
         </div>
       </div>
     </div>
@@ -1146,6 +1156,14 @@ function readXLSX(file) {
   });
 }
 
+function fileToBase64(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result.split(',')[1]); // strip data:...;base64,
+    reader.readAsDataURL(file);
+  });
+}
+
 function wireInput(id, handler) {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', e => { if (e.target.files[0]) handler(e.target.files[0]); });
@@ -1158,16 +1176,15 @@ wireInput('settings-tx-input',       f => handleTxFile(f));
 wireInput('settings-acct-input',     f => handleAcctFile(f));
 
 async function handlePortfolioFile(file) {
-  const rows = await readXLSX(file);
+  const [rows, b64] = await Promise.all([readXLSX(file), fileToBase64(file)]);
   portfolioRows = parsePortfolio(rows);
   if (!portfolioRows.length) { alert('Could not parse portfolio file. Please check the format.'); return; }
+  LS.set('file_portfolio_b64', b64);
+  supabasePushFile('portfolio', b64).catch(() => {});
   document.getElementById('port-badge').textContent = 'Portfolio loaded';
   document.getElementById('port-badge').style.display = 'block';
-  // If both optional files already loaded, skip straight to dashboard
   if (txRows && acctRows) { finishUpload(); return; }
-  // If upload-screen not visible (re-upload from settings), just re-render
   if (document.getElementById('upload-screen').style.display === 'none') { renderDashboard(); return; }
-  // Show step 2, hiding cards for files already uploaded
   showUploadStep2();
 }
 
@@ -1195,13 +1212,15 @@ function finishUpload() {
 let acctRows = null;
 
 async function handleAcctFile(file) {
-  const rows = await readXLSX(file);
+  const [rows, b64] = await Promise.all([readXLSX(file), fileToBase64(file)]);
   acctRows = parseAcct(rows);
   console.log('[Acct] Parsed', acctRows.length, 'cash flow rows');
+  LS.set('file_acct_b64', b64);
+  supabasePushFile('acct', b64).catch(() => {});
   if (document.getElementById('upload-screen').style.display !== 'none') {
     const card = document.getElementById('upload-acct-card');
     if (card) card.style.display = 'none';
-    if (txRows) finishUpload(); // both optional files now uploaded
+    if (txRows) finishUpload();
   } else if (portfolioRows) {
     renderDashboard();
   }
@@ -1247,13 +1266,14 @@ function parseAcct(rows) {
 }
 
 async function handleTxFile(file) {
-  const rows = await readXLSX(file);
+  const [rows, b64] = await Promise.all([readXLSX(file), fileToBase64(file)]);
   txRows = parseTx(rows);
+  LS.set('file_tx_b64', b64);
+  supabasePushFile('tx', b64).catch(() => {});
   if (document.getElementById('upload-screen').style.display !== 'none') {
-    // Still in upload flow — hide the tx card and auto-advance if all done
     const card = document.getElementById('upload-tx-card');
     if (card) card.style.display = 'none';
-    if (acctRows) finishUpload(); // both optional files now uploaded
+    if (acctRows) finishUpload();
   } else if (portfolioRows) {
     renderDashboard();
   }
@@ -5360,6 +5380,85 @@ saveWatchlist = function() {
   _sbPushTimer = setTimeout(supabasePush, 2000);
 };
 
+// ── File sync ─────────────────────────────────────────────────────────────────
+
+async function supabasePushFile(fileKey, base64Data) {
+  try {
+    const res = await fetch(WORKERS.supabase + '?action=push_file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_key: fileKey, data: base64Data, updated_at: new Date().toISOString() }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    console.log('[Supabase] file pushed:', fileKey);
+  } catch(e) {
+    console.warn('[Supabase] file push failed:', fileKey, e.message);
+  }
+}
+
+async function supabasePullFiles() {
+  try {
+    const res = await fetch(WORKERS.supabase + '?action=pull_files');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) return false;
+
+    // Build a map of the most recent version of each file
+    const files = {};
+    rows.forEach(r => { if (!files[r.file_key]) files[r.file_key] = r; });
+
+    let loaded = false;
+
+    // Restore each file by converting base64 → binary → XLSX parse
+    async function restoreFile(key, handler) {
+      const row = files[key];
+      if (!row || !row.data) return;
+      // Check if local copy is newer
+      const localB64 = LS.get('file_' + key + '_b64');
+      if (localB64 === row.data) return; // already have same version
+      try {
+        // Convert base64 to binary string, then parse
+        const binary = atob(row.data);
+        const wb = XLSX.read(binary, { type: 'binary', cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+        await handler(rows, row.data);
+        loaded = true;
+        console.log('[Supabase] file restored from cloud:', key);
+      } catch(e) {
+        console.warn('[Supabase] file restore failed:', key, e.message);
+      }
+    }
+
+    await restoreFile('portfolio', async (rows, b64) => {
+      const parsed = parsePortfolio(rows);
+      if (parsed.length) { portfolioRows = parsed; LS.set('file_portfolio_b64', b64); }
+    });
+    await restoreFile('tx', async (rows, b64) => {
+      txRows = parseTx(rows);
+      LS.set('file_tx_b64', b64);
+    });
+    await restoreFile('acct', async (rows, b64) => {
+      acctRows = parseAcct(rows);
+      LS.set('file_acct_b64', b64);
+    });
+
+    return loaded;
+  } catch(e) {
+    console.warn('[Supabase] file pull failed:', e.message);
+    return false;
+  }
+}
+
+// Also push any locally cached files that haven't been synced yet
+async function supabasePushLocalFiles() {
+  const keys = ['portfolio', 'tx', 'acct'];
+  for (const key of keys) {
+    const b64 = LS.get('file_' + key + '_b64');
+    if (b64) await supabasePushFile(key, b64).catch(() => {});
+  }
+}
+
 
 // ═══════════════════════════════════════════════════════════════
 // INIT
@@ -5385,9 +5484,24 @@ try {
     showPage('dashboard');
   }
   // Auto-pull from Supabase in background on load
-  setTimeout(function() {
-    supabasePull().catch(function() {});
-  }, 1000);
+  setTimeout(async function() {
+    try {
+      // Pull watchlist
+      await supabasePull().catch(() => {});
+      // Pull files — if new files loaded, re-render dashboard
+      const filesLoaded = await supabasePullFiles().catch(() => false);
+      if (filesLoaded && portfolioRows && portfolioRows.length) {
+        persistPortfolio();
+        if (document.getElementById('upload-screen').style.display !== 'none') {
+          document.getElementById('upload-screen').style.display = 'none';
+          document.getElementById('dashboard').style.display = 'block';
+          showPage('dashboard');
+        }
+        renderDashboard();
+        _updateSyncStatus('✓ Files & watchlist restored from cloud');
+      }
+    } catch(e) { console.warn('[Supabase init pull]', e); }
+  }, 800);
 } catch(e) {
   console.error('[INIT CRASH]', e);
   const el = document.getElementById('init-error-banner');
