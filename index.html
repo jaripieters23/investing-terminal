@@ -593,7 +593,7 @@ html{scroll-padding-top:var(--header-h)}
 <div id="watchlist-page">
   <div class="watchlist-header"><div class="watchlist-title">Watchlist</div><button class="scan-btn secondary" onclick="refreshWatchlist()" style="font-size:11px;padding:6px 12px">&#x21bb; Refresh prices</button></div>
   <div class="wl-table-wrap"><table>
-    <thead><tr><th onclick="sortWatchlist('name')">Company &#x21C5;</th><th class="right" onclick="sortWatchlist('score')">Score &#x21C5;</th><th class="right">Verdict</th><th class="right" onclick="sortWatchlist('price')">Price &#x21C5;</th><th class="right">Target range</th><th class="right" onclick="sortWatchlist('upside')">Upside &#x21C5;</th><th class="right"></th></tr></thead>
+    <thead><tr><th onclick="sortWatchlist('name')">Company &#x21C5;</th><th class="right" onclick="sortWatchlist('score')">Score &#x21C5;</th><th class="right">Verdict</th><th class="right" onclick="sortWatchlist('price')">Price &#x21C5;</th><th class="right">Low target</th><th class="right" onclick="sortWatchlist('upside')">Upside &#x21C5;</th><th class="right"></th></tr></thead>
     <tbody id="watchlist-body"></tbody>
   </table></div>
   <div id="watchlist-empty" style="display:none;padding:60px 24px;text-align:center;color:var(--text-3);font-size:13px">No stocks on your watchlist yet. Use Market Scan to find and add stocks.</div>
@@ -2943,8 +2943,8 @@ function renderWatchlistTable() {
   empty.style.display = 'none';
   updateWatchlistBadge();
   const sorted = [...watchlist].sort((a,b) => {
-    const av = wlSortKey === 'name' ? a.name : wlSortKey === 'score' ? a.totalScore : wlSortKey === 'price' ? (a.currentPrice||0) : (a.currentPrice && a.targetMean ? (a.targetMean-a.currentPrice)/a.currentPrice*100 : -999);
-    const bv = wlSortKey === 'name' ? b.name : wlSortKey === 'score' ? b.totalScore : wlSortKey === 'price' ? (b.currentPrice||0) : (b.currentPrice && b.targetMean ? (b.targetMean-b.currentPrice)/b.currentPrice*100 : -999);
+    const av = wlSortKey === 'name' ? a.name : wlSortKey === 'score' ? a.totalScore : wlSortKey === 'price' ? (a.currentPrice||0) : (a.currentPrice && (a.manualTargetLow||a.targetLow) ? ((a.manualTargetLow||a.targetLow)-a.currentPrice)/a.currentPrice*100 : -999);
+    const bv = wlSortKey === 'name' ? b.name : wlSortKey === 'score' ? b.totalScore : wlSortKey === 'price' ? (b.currentPrice||0) : (b.currentPrice && (b.manualTargetLow||b.targetLow) ? ((b.manualTargetLow||b.targetLow)-b.currentPrice)/b.currentPrice*100 : -999);
     return typeof av === 'string' ? av.localeCompare(bv) * wlSortDir : (bv - av) * wlSortDir;
   });
   const sym = s => s === 'USD' ? '$' : s === 'GBP' ? '£' : '€';
@@ -2957,17 +2957,17 @@ function renderWatchlistTable() {
     const tHigh = s.manualTargetHigh ?? s.targetHigh ?? null;
     const isManual = s.manualTargetLow != null || s.manualTargetMean != null || s.manualTargetHigh != null;
 
-    const upside = s.currentPrice && tMean ? ((tMean - s.currentPrice) / s.currentPrice * 100).toFixed(1) : null;
+    // Upside calculated from low target
+    const upside = s.currentPrice && tLow ? ((tLow - s.currentPrice) / s.currentPrice * 100).toFixed(1) : null;
     const upsideColor = upside > 0 ? 'var(--green)' : 'var(--red)';
 
-    // Price range bar
-    let barHTML = '<span class="wl-na">—</span>';
-    if (s.currentPrice && tLow && tHigh) {
-      const range   = tHigh - tLow;
-      const pos     = range > 0 ? Math.min(100, Math.max(0, (s.currentPrice - tLow) / range * 100)) : 50;
-      const dotColor = s.currentPrice < tLow ? 'var(--green)' : s.currentPrice < tMean ? 'var(--amber)' : 'var(--red)';
-      barHTML = '<div class="wl-bar-wrap"><div class="wl-bar-range" style="left:0;width:100%"></div><div class="wl-bar-dot" style="left:' + pos + '%;background:' + dotColor + '"></div></div>';
-    }
+    // Target cell: just show the low target value
+    const targetCell = tLow
+      ? '<div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">'
+        + '<span style="font-size:13px;font-weight:600;color:var(--text)">' + sym2 + tLow.toFixed(2) + '</span>'
+        + infoBadge
+        + '</div>'
+      : '<span class="wl-na">—</span>';
 
     // Info badge for manual targets
     let infoBadge = '';
@@ -2989,11 +2989,7 @@ function renderWatchlistTable() {
       + '<td class="right wl-td" style="font-weight:600;color:' + (s.totalScore>=7.5?'var(--green)':s.totalScore>=5.5?'var(--amber)':'var(--text-3)') + '">' + s.totalScore.toFixed(1) + '</td>'
       + '<td class="right wl-td"><span class="wl-verdict ' + verdictCls + '">' + s.verdict + '</span></td>'
       + '<td class="right wl-td private">' + (s.currentPrice ? (sym2+s.currentPrice.toFixed(2)) : '<span class="wl-na">—</span>') + '</td>'
-      + '<td class="right wl-td"><div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">'
-      +   barHTML
-      +   (tMean ? '<span style="font-size:10px;color:var(--text-3);margin-left:4px">' + sym2 + tMean.toFixed(0) + '</span>' : '')
-      +   infoBadge
-      + '</div></td>'
+      + '<td class="right wl-td">' + targetCell + '</td>'
       + '<td class="right wl-td" style="color:' + upsideColor + ';font-weight:600">' + (upside !== null ? (upside > 0 ? '+' : '') + upside + '%' : '<span class="wl-na">—</span>') + '</td>'
       + '<td class="right wl-td" style="white-space:nowrap">'
       +   '<button class="wl-edit-target-btn" data-name="' + s.name.replace(/"/g,'&quot;') + '" onclick="toggleTargetForm(this.dataset.name)">&#9999; Update</button>'
