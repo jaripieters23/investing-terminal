@@ -2978,77 +2978,94 @@ function renderWatchlistTable() {
       +   '&nbsp;<button class="wl-remove-btn" onclick="removeFromWatchlist(\'' + nameEsc + '\')">✕</button>'
       + '</td>'
       + '</tr>'
-      + '<tr class="wl-target-row" id="wl-target-form-' + s.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'') + '" style="display:none">'
-      + '<td colspan="7"><div class="wl-target-form" id="wl-target-form-inner-' + s.name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'') + '"></div></td>'
       + '</tr>';
   }).join('');
 }
 
 
-function _wlSafeId(name) {
-  return name.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-}
+let _targetModalName = null;
 
 function toggleTargetForm(name) {
-  const sid  = _wlSafeId(name);
-  const row  = document.getElementById('wl-target-form-' + sid);
-  const inner= document.getElementById('wl-target-form-inner-' + sid);
-  if (!row || !inner) return;
-  const open = row.style.display !== 'none';
-  if (open) { row.style.display = 'none'; return; }
-
-  const s = watchlist.find(w => w.name === name);
-  if (!s) return;
-  const sym = s.currency === 'USD' ? '$' : s.currency === 'GBP' ? '£' : '€';
-  const tLow  = s.manualTargetLow  ?? '';
-  const tMean = s.manualTargetMean ?? '';
-  const tHigh = s.manualTargetHigh ?? '';
-  const hasManual = s.manualTargetLow != null || s.manualTargetMean != null;
-
-  inner.innerHTML =
-    '<span style="font-size:11px;color:var(--text-3);margin-right:4px">Manual targets (' + sym + '):</span>'
-    + '<div style="display:flex;align-items:center;gap:4px">'
-    +   '<span style="font-size:10px;color:var(--text-3)">Low</span>'
-    +   '<input class="wl-target-input" id="wlt-low-' + sid + '" type="number" step="0.01" placeholder="e.g. 120" value="' + tLow + '">'
-    + '</div>'
-    + '<div style="display:flex;align-items:center;gap:4px">'
-    +   '<span style="font-size:10px;color:var(--text-3)">Mean</span>'
-    +   '<input class="wl-target-input" id="wlt-mean-' + sid + '" type="number" step="0.01" placeholder="e.g. 150" value="' + tMean + '">'
-    + '</div>'
-    + '<div style="display:flex;align-items:center;gap:4px">'
-    +   '<span style="font-size:10px;color:var(--text-3)">High</span>'
-    +   '<input class="wl-target-input" id="wlt-high-' + sid + '" type="number" step="0.01" placeholder="e.g. 180" value="' + tHigh + '">'
-    + '</div>'
-    + '<button class="wl-target-save" onclick="saveManualTarget(' + JSON.stringify(name) + ')">Save</button>'
-    + (hasManual ? '<button class="wl-target-clear" onclick="clearManualTarget(' + JSON.stringify(name) + ')">Clear</button>' : '')
-    + '<button class="wl-target-clear" onclick="toggleTargetForm(' + JSON.stringify(name) + ')">Cancel</button>';
-
-  row.style.display = '';
-  setTimeout(() => { const el = document.getElementById('wlt-low-' + sid); if (el) el.focus(); }, 50);
+  openTargetModal(name);
 }
 
-function saveManualTarget(name) {
-  const sid  = _wlSafeId(name);
-  const low  = parseFloat(document.getElementById('wlt-low-'  + sid)?.value) || null;
-  const mean = parseFloat(document.getElementById('wlt-mean-' + sid)?.value) || null;
-  const high = parseFloat(document.getElementById('wlt-high-' + sid)?.value) || null;
+function openTargetModal(name) {
+  _targetModalName = name;
+  const s = watchlist.find(w => w.name === name);
+  if (!s) return;
 
+  const sym = s.currency === 'USD' ? '$' : s.currency === 'GBP' ? '£' : '€';
+  const tLow   = s.manualTargetLow   ?? '';
+  const tMean  = s.manualTargetMean  ?? '';
+  const tHigh  = s.manualTargetHigh  ?? '';
+  const tPrice = s.manualPrice       ?? s.currentPrice ?? '';
+  const hasManual = s.manualTargetLow != null || s.manualTargetMean != null || s.manualPrice != null;
+
+  document.getElementById('target-modal-title').textContent = s.name;
+  document.getElementById('target-modal-sub').textContent   = (s.ticker || '') + (s.currency ? ' · ' + s.currency : '');
+
+  const inputStyle = 'width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:8px 10px;font-family:\'Inter\',sans-serif;box-sizing:border-box';
+  const labelStyle = 'font-size:11px;color:var(--text-3);margin-bottom:5px;display:block';
+  const groupStyle = 'margin-bottom:16px';
+
+  document.getElementById('target-modal-body').innerHTML =
+    '<div style="' + groupStyle + '">'
+    +   '<label style="' + labelStyle + '">Current Price (' + sym + ') — manual override</label>'
+    +   '<input id="tmod-price" type="number" step="0.01" placeholder="e.g. 145.50" value="' + tPrice + '" style="' + inputStyle + '">'
+    +   '<div style="font-size:10px;color:var(--text-3);margin-top:4px">Leave blank to use live price from API</div>'
+    + '</div>'
+    + '<div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:12px;font-size:11px;font-weight:600;color:var(--text-2)">Analyst / Personal Price Targets (' + sym + ')</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'
+    +   '<div><label style="' + labelStyle + '">Low</label><input id="tmod-low" type="number" step="0.01" placeholder="e.g. 120" value="' + tLow + '" style="' + inputStyle + '"></div>'
+    +   '<div><label style="' + labelStyle + '">Mean</label><input id="tmod-mean" type="number" step="0.01" placeholder="e.g. 150" value="' + tMean + '" style="' + inputStyle + '"></div>'
+    +   '<div><label style="' + labelStyle + '">High</label><input id="tmod-high" type="number" step="0.01" placeholder="e.g. 180" value="' + tHigh + '" style="' + inputStyle + '"></div>'
+    + '</div>'
+    + (hasManual ? '<button class="wl-target-clear" style="margin-top:4px" onclick="clearManualTarget(' + JSON.stringify(name) + ');closeTargetModal()">Clear all manual values</button>' : '');
+
+  document.getElementById('target-modal-backdrop').classList.add('open');
+  document.getElementById('target-modal').classList.add('open');
+  setTimeout(() => { document.getElementById('tmod-price')?.focus(); }, 50);
+}
+
+function closeTargetModal() {
+  document.getElementById('target-modal-backdrop').classList.remove('open');
+  document.getElementById('target-modal').classList.remove('open');
+  _targetModalName = null;
+}
+
+function submitTargetModal() {
+  const name = _targetModalName;
+  if (!name) return;
   const idx = watchlist.findIndex(w => w.name === name);
   if (idx < 0) return;
 
-  watchlist[idx].manualTargetLow  = low;
-  watchlist[idx].manualTargetMean = mean;
-  watchlist[idx].manualTargetHigh = high;
-  watchlist[idx].manualTargetUpdatedAt = new Date().toISOString();
+  const price = parseFloat(document.getElementById('tmod-price')?.value) || null;
+  const low   = parseFloat(document.getElementById('tmod-low')?.value)   || null;
+  const mean  = parseFloat(document.getElementById('tmod-mean')?.value)  || null;
+  const high  = parseFloat(document.getElementById('tmod-high')?.value)  || null;
 
-  // Recompute verdict based on new targets
   const s = watchlist[idx];
-  if (s.currentPrice && (low || mean)) {
-    s.verdict = s.currentPrice < (low || mean) ? 'BUY' : s.currentPrice < mean ? 'WATCH' : 'PASS';
+  s.manualPrice        = price;
+  s.manualTargetLow    = low;
+  s.manualTargetMean   = mean;
+  s.manualTargetHigh   = high;
+  s.manualTargetUpdatedAt = new Date().toISOString();
+
+  // Update displayed price if manually set
+  if (price) s.currentPrice = price;
+
+  // Recompute verdict
+  const effectiveMean = mean ?? s.targetMean;
+  const effectiveLow  = low  ?? s.targetLow;
+  const effectivePrice = price ?? s.currentPrice;
+  if (effectivePrice && (effectiveLow || effectiveMean)) {
+    s.verdict = effectivePrice < (effectiveLow ?? effectiveMean) ? 'BUY'
+              : effectivePrice < effectiveMean ? 'WATCH' : 'PASS';
   }
 
-  saveWatchlist(); // triggers auto-push to Supabase
+  saveWatchlist();
   renderWatchlistTable();
+  closeTargetModal();
 }
 
 function clearManualTarget(name) {
@@ -5391,6 +5408,23 @@ try {
   <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
     <button class="manual-entry-clear" onclick="closeMissingModal()">Cancel</button>
     <button class="manual-entry-save" style="font-size:12px;padding:6px 18px" onclick="submitMissingModal()">Save</button>
+  </div>
+</div>
+<div class="modal-backdrop" id="target-modal-backdrop" onclick="closeTargetModal()"></div>
+<div class="modal" id="target-modal" style="width:min(420px,92vw)">
+  <div class="modal-header">
+    <div>
+      <div class="modal-title" id="target-modal-title">Edit Targets</div>
+      <div class="modal-sub" id="target-modal-sub"></div>
+    </div>
+    <button class="modal-close" onclick="closeTargetModal()">✕</button>
+  </div>
+  <div class="modal-body">
+    <div id="target-modal-body"></div>
+  </div>
+  <div class="modal-footer">
+    <button class="wl-target-clear" onclick="closeTargetModal()">Cancel</button>
+    <button class="wl-target-save" style="font-size:12px;padding:6px 18px" onclick="submitTargetModal()">Save</button>
   </div>
 </div>
 
