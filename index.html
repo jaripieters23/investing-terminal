@@ -3863,14 +3863,60 @@ Respond ONLY with valid JSON (no markdown):
 }
 
 // ── Manual quant overrides ────────────────────────────────────────────────────
-// Criteria config for validation and display
+// Each criterion can have `components` — individual raw values the user enters,
+// from which the criterion value is computed. If no components, user enters the
+// final value directly (old behaviour).
 const QUANT_CRITERIA_CONFIG = {
-  revGrowth:    { type:'dual', labels:['5Y CAGR (%)', 'Fwd (%)'],     keys:['hist','fwd'],    thresholds:[9,7],    unit:'%'  },
-  epsGrowth:    { type:'dual', labels:['5Y CAGR (%)', 'Fwd 2Y (%)'],  keys:['hist','fwd'],    thresholds:[12,9],   unit:'%'  },
-  fcfConv:      { type:'single', label:'FCF / Net Income (%)',         threshold:80,            unit:'%'  },
-  netMargin:    { type:'single', label:'Net Profit Margin (%)',        threshold:10,            unit:'%'  },
-  roic:         { type:'single', label:'ROIC (%)',                     threshold:15,            unit:'%'  },
-  netDebtEbitda:{ type:'single', label:'Net Debt / EBITDA (x)',        threshold:3,             unit:'x', lowerIsBetter:true },
+  revGrowth: {
+    type:'dual', labels:['5Y CAGR (%)', 'Fwd (%)'], keys:['hist','fwd'], thresholds:[9,7], unit:'%',
+    // No components — user enters the % directly (already simple enough)
+  },
+  epsGrowth: {
+    type:'dual', labels:['5Y CAGR (%)', 'Fwd 2Y (%)'], keys:['hist','fwd'], thresholds:[12,9], unit:'%',
+  },
+  fcfConv: {
+    type:'single', label:'FCF / Net Income', threshold:80, unit:'%',
+    components: [
+      { key:'fcf',       label:'Free Cash Flow',  placeholder:'e.g. 5200000000', hint:'absolute value in local currency' },
+      { key:'netIncome', label:'Net Income',       placeholder:'e.g. 6500000000', hint:'absolute value in local currency' },
+    ],
+    compute: c => c.fcf != null && c.netIncome != null && c.netIncome !== 0
+      ? (c.fcf / c.netIncome) * 100 : null,
+    format: v => v.toFixed(1) + '%',
+  },
+  netMargin: {
+    type:'single', label:'Net Profit Margin', threshold:10, unit:'%',
+    components: [
+      { key:'netIncome', label:'Net Income',  placeholder:'e.g. 6500000000', hint:'absolute value' },
+      { key:'revenue',   label:'Revenue',     placeholder:'e.g. 60000000000', hint:'absolute value' },
+    ],
+    compute: c => c.netIncome != null && c.revenue != null && c.revenue !== 0
+      ? (c.netIncome / c.revenue) * 100 : null,
+    format: v => v.toFixed(1) + '%',
+  },
+  roic: {
+    type:'single', label:'ROIC', threshold:15, unit:'%',
+    components: [
+      { key:'nopat',        label:'NOPAT (or EBIT×0.79)', placeholder:'e.g. 4000000000', hint:'Net operating profit after tax' },
+      { key:'investedCap',  label:'Invested Capital',     placeholder:'e.g. 25000000000', hint:'Equity + net debt' },
+    ],
+    compute: c => c.nopat != null && c.investedCap != null && c.investedCap !== 0
+      ? (c.nopat / c.investedCap) * 100 : null,
+    format: v => v.toFixed(1) + '%',
+    // Also allow direct entry as fallback
+    allowDirect: true, directLabel: 'Or enter ROIC % directly',
+  },
+  netDebtEbitda: {
+    type:'single', label:'Net Debt / EBITDA', threshold:3, unit:'x', lowerIsBetter:true,
+    components: [
+      { key:'netDebt', label:'Net Debt',  placeholder:'e.g. 8000000000', hint:'Total debt minus cash' },
+      { key:'ebitda',  label:'EBITDA',    placeholder:'e.g. 12000000000', hint:'Earnings before interest, tax, D&A' },
+    ],
+    compute: c => c.netDebt != null && c.ebitda != null && c.ebitda !== 0
+      ? c.netDebt / c.ebitda : null,
+    format: v => v.toFixed(2) + 'x',
+    allowDirect: true, directLabel: 'Or enter ratio directly',
+  },
 };
 
 function applyManualOverrides(name, quantCriteria) {
@@ -3890,6 +3936,18 @@ function applyManualOverrides(name, quantCriteria) {
       const fPass = fwd  != null ? fwd  > cfg.thresholds[1] : null;
       pass  = hPass !== null && fPass !== null ? (hPass && fPass) : hPass !== null ? hPass : fPass;
       value = [hist != null ? hist.toFixed(1)+'% (5Y)' : null, fwd != null ? fwd.toFixed(1)+'% (fwd)' : null].filter(Boolean).join(' · ');
+    } else if (cfg.components) {
+      // Component-based: compute the criterion from stored component values
+      let computed = null;
+      if (typeof ov === 'object' && !Array.isArray(ov) && cfg.compute) {
+        computed = cfg.compute(ov);
+      } else if (typeof ov === 'number') {
+        // Legacy direct value
+        computed = ov;
+      }
+      if (computed == null) return q;
+      pass  = cfg.lowerIsBetter ? computed < cfg.threshold : computed > cfg.threshold;
+      value = cfg.format ? cfg.format(computed) : computed.toFixed(1) + cfg.unit;
     } else {
       const v = +ov;
       pass  = cfg.lowerIsBetter ? v < cfg.threshold : v > cfg.threshold;
@@ -3945,21 +4003,37 @@ function openMissingModal(btn) {
   nullCriteria.forEach(q => {
     const cfg = QUANT_CRITERIA_CONFIG[q.key];
     if (!cfg) return;
-    html += `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">`;
-    html += `<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:6px">${q.icon} ${q.label}</div>`;
+    html += `<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">`;
+    html += `<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:8px">${q.icon} ${q.label}</div>`;
     if (cfg.type === 'dual') {
       cfg.keys.forEach((k, i) => {
         const val = existing[q.key]?.[k] ?? '';
         html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
           <label style="font-size:11px;color:var(--text-3);width:130px;flex-shrink:0">${cfg.labels[i]}</label>
-          <input class="manual-entry-input" style="flex:1" id="mmissing-${q.key}-${k}" type="number" step="0.1" placeholder="e.g. ${cfg.thresholds[i]}" value="${val}">
+          <input class="manual-entry-input" style="flex:1" id="mmissing-${q.key}-${k}" type="number" step="0.1" placeholder="${cfg.thresholds[i]}" value="${val}">
         </div>`;
       });
+    } else if (cfg.components) {
+      cfg.components.forEach(comp => {
+        const val = (typeof existing[q.key] === 'object' && existing[q.key] !== null) ? (existing[q.key][comp.key] ?? '') : '';
+        html += `<div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:3px">${comp.label}</div>
+          <input class="manual-entry-input" style="width:100%;box-sizing:border-box" id="mmissing-${q.key}-${comp.key}" type="number" step="any" placeholder="${comp.placeholder}" value="${val}">
+          ${comp.hint ? `<div style="font-size:10px;color:var(--text-3);margin-top:2px">${comp.hint}</div>` : ''}
+        </div>`;
+      });
+      if (cfg.allowDirect) {
+        const directVal = (typeof existing[q.key] === 'number') ? existing[q.key] : '';
+        html += `<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:3px">${cfg.directLabel}</div>
+          <input class="manual-entry-input" style="width:100%;box-sizing:border-box" id="mmissing-${q.key}-direct" type="number" step="0.1" placeholder="${cfg.threshold}" value="${directVal}">
+        </div>`;
+      }
     } else {
       const val = existing[q.key] ?? '';
       html += `<div style="display:flex;align-items:center;gap:8px">
-        <label style="font-size:11px;color:var(--text-3);width:130px;flex-shrink:0">${cfg.label}</label>
-        <input class="manual-entry-input" style="flex:1" id="mmissing-${q.key}" type="number" step="0.1" placeholder="e.g. ${cfg.threshold}" value="${val}">
+        <label style="font-size:11px;color:var(--text-3);width:130px;flex-shrink:0">${cfg.label} (${cfg.unit})</label>
+        <input class="manual-entry-input" style="flex:1" id="mmissing-${q.key}" type="number" step="0.1" placeholder="${cfg.threshold}" value="${val}">
       </div>`;
     }
     html += `</div>`;
@@ -3968,7 +4042,6 @@ function openMissingModal(btn) {
 
   document.getElementById('missing-modal-backdrop').classList.add('open');
   document.getElementById('missing-modal').classList.add('open');
-  // Focus first input
   setTimeout(() => { const el = document.querySelector('#missing-modal input'); if (el) el.focus(); }, 50);
 }
 
@@ -3997,6 +4070,19 @@ function submitMissingModal() {
         if (el && el.value !== '') { vals[k] = parseFloat(el.value); anyFilled = true; }
       });
       if (anyFilled) saveManualCriterion(name, q.key, vals);
+    } else if (cfg.components) {
+      const comps = {};
+      let anyComp = false;
+      cfg.components.forEach(comp => {
+        const el = document.getElementById(`mmissing-${q.key}-${comp.key}`);
+        if (el && el.value !== '') { comps[comp.key] = parseFloat(el.value); anyComp = true; }
+      });
+      if (anyComp) {
+        saveManualCriterion(name, q.key, comps);
+      } else if (cfg.allowDirect) {
+        const el = document.getElementById(`mmissing-${q.key}-direct`);
+        if (el && el.value !== '') saveManualCriterion(name, q.key, parseFloat(el.value));
+      }
     } else {
       const el = document.getElementById(`mmissing-${q.key}`);
       if (el && el.value !== '') saveManualCriterion(name, q.key, parseFloat(el.value));
@@ -4031,29 +4117,56 @@ function openManualEntry(nameOrBtn, key, containerId) {
   const container = document.getElementById(cid);
   if (!container) return;
 
-  let html = '<div class="manual-entry-wrap">';
+  let html = '<div class="manual-entry-wrap" style="flex-direction:column;align-items:stretch;gap:8px">';
+
   if (cfg.type === 'dual') {
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
     cfg.keys.forEach((k, i) => {
       const val = existing?.[k] ?? '';
-      html += '<span class="manual-entry-label">' + cfg.labels[i] + '</span>';
-      html += '<input class="manual-entry-input" id="mentry-' + key + '-' + k + '" type="number" step="0.1" placeholder="e.g. ' + cfg.thresholds[i] + '" value="' + val + '">';
+      html += `<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:100px">
+        <span class="manual-entry-label">${cfg.labels[i]}</span>
+        <input class="manual-entry-input" id="mentry-${key}-${k}" type="number" step="0.1" placeholder="${cfg.thresholds[i]}" value="${val}" style="width:100%">
+      </div>`;
     });
+    html += '</div>';
+  } else if (cfg.components) {
+    cfg.components.forEach(comp => {
+      const val = (typeof existing === 'object' && existing !== null) ? (existing[comp.key] ?? '') : '';
+      html += `<div style="display:flex;flex-direction:column;gap:3px">
+        <span class="manual-entry-label">${comp.label}</span>
+        <input class="manual-entry-input" id="mentry-${key}-${comp.key}" type="number" step="any" placeholder="${comp.placeholder}" value="${val}" style="width:100%">
+        ${comp.hint ? `<span style="font-size:10px;color:var(--text-3)">${comp.hint}</span>` : ''}
+      </div>`;
+    });
+    if (cfg.allowDirect) {
+      const directVal = (typeof existing === 'number') ? existing : '';
+      html += `<div style="border-top:1px solid var(--border);padding-top:6px;display:flex;flex-direction:column;gap:3px">
+        <span class="manual-entry-label" style="color:var(--text-3)">${cfg.directLabel}</span>
+        <input class="manual-entry-input" id="mentry-${key}-direct" type="number" step="0.1" placeholder="${cfg.threshold}" value="${directVal}" style="width:100%">
+      </div>`;
+    }
   } else {
-    html += '<span class="manual-entry-label">' + cfg.label + '</span>';
     const val = existing ?? '';
-    html += '<input class="manual-entry-input" id="mentry-' + key + '" type="number" step="0.1" placeholder="e.g. ' + cfg.threshold + '" value="' + val + '">';
+    html += `<div style="display:flex;align-items:center;gap:8px">
+      <span class="manual-entry-label">${cfg.label} (${cfg.unit})</span>
+      <input class="manual-entry-input" id="mentry-${key}" type="number" step="0.1" placeholder="${cfg.threshold}" value="${val}" style="flex:1">
+    </div>`;
   }
-  html += '<button class="manual-entry-save" onclick="submitManualEntry(' + JSON.stringify(name) + ',' + JSON.stringify(key) + ')">Save</button>';
-  if (existing != null) html += '<button class="manual-entry-clear" onclick="clearManualEntry(' + JSON.stringify(name) + ',' + JSON.stringify(key) + ')">Clear</button>';
+
+  html += `<div style="display:flex;gap:6px">
+    <button class="manual-entry-save" onclick="submitManualEntry(${JSON.stringify(name)},${JSON.stringify(key)})">Save</button>
+    ${existing != null ? `<button class="manual-entry-clear" onclick="clearManualEntry(${JSON.stringify(name)},${JSON.stringify(key)})">Clear</button>` : ''}
+  </div>`;
   html += '</div>';
   container.innerHTML = html;
-  // Focus first input
   setTimeout(() => { const el = container.querySelector('input'); if (el) el.focus(); }, 30);
 }
 
 function submitManualEntry(name, key) {
   const cfg = QUANT_CRITERIA_CONFIG[key];
+  if (!cfg) return;
   let value;
+
   if (cfg.type === 'dual') {
     value = {};
     cfg.keys.forEach(k => {
@@ -4061,13 +4174,27 @@ function submitManualEntry(name, key) {
       if (el && el.value !== '') value[k] = parseFloat(el.value);
     });
     if (!Object.keys(value).length) return;
+  } else if (cfg.components) {
+    const comps = {};
+    let anyComp = false;
+    cfg.components.forEach(comp => {
+      const el = document.getElementById('mentry-' + key + '-' + comp.key);
+      if (el && el.value !== '') { comps[comp.key] = parseFloat(el.value); anyComp = true; }
+    });
+    if (anyComp) {
+      value = comps;
+    } else if (cfg.allowDirect) {
+      const el = document.getElementById('mentry-' + key + '-direct');
+      if (!el || el.value === '') return;
+      value = parseFloat(el.value);
+    } else { return; }
   } else {
     const el = document.getElementById('mentry-' + key);
     if (!el || el.value === '') return;
     value = parseFloat(el.value);
   }
+
   saveManualCriterion(name, key, value);
-  // Refresh detail page if open
   const cached = _stockDetailCache[name.toLowerCase()];
   if (cached) {
     const updated = { ...cached };
@@ -4075,13 +4202,13 @@ function submitManualEntry(name, key) {
     const { quantScore, quantMissing } = recalcQuantScore(updated.quantCriteria);
     updated.quantScore   = quantScore;
     updated.quantMissing = quantMissing;
-    if (updated.qualScore != null && quantScore != null) {
+    if (updated.qualScore != null && quantScore != null)
       updated.finalScore = Math.round(quantScore * 0.6 + updated.qualScore * 0.4);
-    }
     _stockDetailCache[name.toLowerCase()] = updated;
     renderStockDetail(updated);
   }
 }
+
 
 function clearManualEntry(name, key) {
   clearManualCriterion(name, key);
