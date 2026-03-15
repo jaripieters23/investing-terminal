@@ -2512,57 +2512,78 @@ function renderScanResults() {
 // ═══════════════════════════════════════════════════════════════
 
 const NEWS_FEEDS = [
-  { name: 'FT Markets',        url: 'https://www.ft.com/markets?format=rss',                   category: 'Markets' },
-  { name: 'Reuters Business',  url: 'https://feeds.reuters.com/reuters/businessNews',           category: 'Markets' },
-  { name: 'Bloomberg Markets', url: 'https://feeds.bloomberg.com/markets/news.rss',             category: 'Markets' },
-  { name: 'WSJ Markets',       url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',            category: 'Markets' },
-  { name: 'CNBC Finance',      url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664', category: 'Markets' },
-  { name: 'Seeking Alpha',     url: 'https://seekingalpha.com/feed.xml',                        category: 'Analysis' },
-  { name: 'Motley Fool',       url: 'https://www.fool.com/feeds/index.aspx',                    category: 'Analysis' },
-  { name: 'Investopedia',      url: 'https://www.investopedia.com/feedbuilder/feed/getfeed/?feedName=rss_headline', category: 'Analysis' },
+  { name: 'Reuters',        url: 'https://feeds.reuters.com/reuters/businessNews',  category: 'Markets' },
+  { name: 'WSJ Markets',    url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',   category: 'Markets' },
+  { name: 'CNBC Finance',   url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664', category: 'Markets' },
+  { name: 'Yahoo Finance',  url: 'https://finance.yahoo.com/rss/topstories',         category: 'Markets' },
+  { name: 'Seeking Alpha',  url: 'https://seekingalpha.com/feed.xml',                category: 'Analysis' },
+  { name: 'Investopedia',   url: 'https://www.investopedia.com/feedbuilder/feed/getfeed/?feedName=rss_headline', category: 'Analysis' },
+  { name: 'MarketWatch',    url: 'https://feeds.marketwatch.com/marketwatch/topstories/', category: 'Analysis' },
 ];
 
 const _newsCache = {};
-const NEWS_CACHE_TTL = 15 * 60 * 1000; // 15 min
+const NEWS_CACHE_TTL = 15 * 60 * 1000;
 
-async function fetchRSSFeed(feed) {
+async function fetchRSSFeed(feedUrl, feedName) {
   const now = Date.now();
-  if (_newsCache[feed.url] && now - _newsCache[feed.url].ts < NEWS_CACHE_TTL)
-    return _newsCache[feed.url].items;
+  if (_newsCache[feedUrl] && now - _newsCache[feedUrl].ts < NEWS_CACHE_TTL)
+    return _newsCache[feedUrl].items;
 
-  try {
-    // Use allorigins to proxy RSS (XML) — allowed for RSS, not blocked like Yahoo
-    const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(feed.url);
-    const res  = await fetch(proxy);
-    const data = await res.json();
-    const xml  = data?.contents;
-    if (!xml) return [];
+  // Try multiple proxies in order
+  const proxies = [
+    'https://api.allorigins.win/get?url=' + encodeURIComponent(feedUrl),
+    'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feedUrl),
+  ];
 
-    const parser = new DOMParser();
-    const doc    = parser.parseFromString(xml, 'text/xml');
-    const items  = [...doc.querySelectorAll('item')].slice(0, 8).map(item => ({
-      title:   item.querySelector('title')?.textContent?.trim() || '',
-      link:    item.querySelector('link')?.textContent?.trim() || '',
-      date:    (() => {
-        const raw = item.querySelector('pubDate')?.textContent || item.querySelector('dc\\:date')?.textContent || '';
-        if (!raw) return '';
-        const d = new Date(raw);
-        return isNaN(d) ? raw.slice(0, 16) : d.toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
-      })(),
-      source:  feed.name,
-    }));
+  for (const proxyUrl of proxies) {
+    try {
+      const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const data = await res.json();
 
-    _newsCache[feed.url] = { ts: now, items };
-    return items;
-  } catch(e) {
-    console.warn('[RSS] failed:', feed.name, e.message);
-    return [];
+      let items = [];
+
+      // allorigins returns {contents: '<xml>...'}
+      if (data.contents) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(data.contents, 'text/xml');
+        items = [...doc.querySelectorAll('item')].slice(0, 10).map(el => {
+          const raw = el.querySelector('pubDate')?.textContent || '';
+          const d   = new Date(raw);
+          return {
+            title:  el.querySelector('title')?.textContent?.trim() || '',
+            link:   el.querySelector('link')?.textContent?.trim() || '',
+            date:   isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day:'numeric', month:'short' }),
+            source: feedName,
+          };
+        }).filter(it => it.title);
+      }
+
+      // rss2json returns {items: [...]}
+      if (!items.length && Array.isArray(data.items)) {
+        items = data.items.slice(0, 10).map(it => ({
+          title:  it.title || '',
+          link:   it.link  || it.url || '',
+          date:   it.pubDate ? new Date(it.pubDate).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '',
+          source: feedName,
+        })).filter(it => it.title);
+      }
+
+      if (items.length) {
+        _newsCache[feedUrl] = { ts: now, items };
+        return items;
+      }
+    } catch(e) {
+      console.warn('[RSS]', feedName, e.message);
+    }
   }
+  return [];
 }
 
 let _newsActiveFeed = null;
 let _newsActiveCategory = 'Markets';
 
+// ── News page render ──────────────────────────────────────────────────────────
 async function renderNewsPage() {
   const page = document.getElementById('news-page');
   if (!page) return;
@@ -2570,128 +2591,116 @@ async function renderNewsPage() {
   const categories = [...new Set(NEWS_FEEDS.map(f => f.category))];
   if (!_newsActiveCategory) _newsActiveCategory = categories[0];
 
-  page.innerHTML = `
-    <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+  // Build HTML entirely with string concatenation — no nested template literals
+  const tabsHTML = categories.map(function(cat) {
+    const active = cat === _newsActiveCategory;
+    return '<button data-cat="' + cat + '" onclick="newsSetCategory(this.dataset.cat)" id="news-cat-' + cat + '"'
+      + ' style="background:none;border:none;border-bottom:2px solid ' + (active ? 'var(--blue)' : 'transparent') + ';'
+      + 'color:' + (active ? 'var(--text)' : 'var(--text-3)') + ';'
+      + 'font-size:13px;font-weight:' + (active ? '600' : '400') + ';'
+      + 'padding:0 0 10px;margin-right:24px;cursor:pointer;font-family:\'Inter\',sans-serif;transition:all .15s">' + cat + '</button>';
+  }).join('');
 
-      <!-- sticky sub-header: title + tabs -->
-      <div style="flex-shrink:0;padding:20px 24px 0;border-bottom:1px solid var(--border);background:var(--bg)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <div style="font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.3px">Financial News</div>
-          <div style="font-size:11px;color:var(--text-3)">via RSS · 15 min cache</div>
-        </div>
-        <div style="display:flex;gap:0">
-          ${categories.map(cat => `
-            <button onclick="newsSetCategory('${cat}')" id="news-cat-${cat}"
-              style="background:none;border:none;border-bottom:2px solid ${cat === _newsActiveCategory ? 'var(--blue)' : 'transparent'};
-                color:${cat === _newsActiveCategory ? 'var(--text)' : 'var(--text-3)'};
-                font-size:13px;font-weight:${cat === _newsActiveCategory ? '600' : '400'};
-                padding:0 0 10px;margin-right:24px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s">${cat}</button>
-          `).join('')}
-        </div>
-      </div>
-
-      <!-- body: sidebar + articles, fills remaining height -->
-      <div style="flex:1;display:flex;overflow:hidden;min-height:0">
-        <div id="news-feed-list" class="news-scroll"
-          style="width:176px;flex-shrink:0;border-right:1px solid var(--border);
-                 overflow-y:auto;padding:14px 8px;background:var(--card)">
-        </div>
-        <div id="news-article-list" class="news-scroll"
-          style="flex:1;overflow-y:auto;padding:0 32px 40px;max-width:860px">
-        </div>
-      </div>
-
-    </div>`;
+  page.innerHTML =
+    '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">'
+    + '<div style="flex-shrink:0;padding:20px 24px 0;border-bottom:1px solid var(--border);background:var(--bg)">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +     '<div style="font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.3px">Financial News</div>'
+    +     '<div style="font-size:11px;color:var(--text-3)">via RSS · 15 min cache</div>'
+    +   '</div>'
+    +   '<div style="display:flex">' + tabsHTML + '</div>'
+    + '</div>'
+    + '<div style="flex:1;display:flex;overflow:hidden;min-height:0">'
+    +   '<div id="news-feed-list" class="news-scroll" style="width:176px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;padding:14px 8px;background:var(--card)"></div>'
+    +   '<div id="news-article-list" class="news-scroll" style="flex:1;overflow-y:auto;padding:0 32px 40px"></div>'
+    + '</div>'
+    + '</div>';
 
   _renderNewsFeedList();
-  const firstFeed = NEWS_FEEDS.find(f => f.category === _newsActiveCategory);
+  const firstFeed = NEWS_FEEDS.find(function(f) { return f.category === _newsActiveCategory; });
   if (firstFeed) await newsSelectFeed(firstFeed);
 }
 
 function _renderNewsFeedList() {
   const list = document.getElementById('news-feed-list');
   if (!list) return;
-  const feeds = NEWS_FEEDS.filter(f => f.category === _newsActiveCategory);
-  list.innerHTML = '<div style="font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;padding:2px 8px 10px">Sources</div>'
-    + feeds.map((f, idx) => {
-        const safeId = f.name.replace(/\s/g,'_');
-        const isActive = _newsActiveFeed?.name === f.name;
-        // Use data attribute + event delegation to avoid any quote issues in onclick
-        return '<div id="news-feed-btn-' + safeId + '"'
-          + ' class="news-feed-btn' + (isActive ? ' active' : '') + '"'
-          + ' data-feedidx="' + idx + '"'
-          + ' onclick="newsSelectFeedByIdx(+this.dataset.feedidx)">'
-          + f.name + '</div>';
-      }).join('');
+  const feeds = NEWS_FEEDS.filter(function(f) { return f.category === _newsActiveCategory; });
+  let html = '<div style="font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;padding:2px 8px 10px">Sources</div>';
+  feeds.forEach(function(f, idx) {
+    const active = _newsActiveFeed && _newsActiveFeed.name === f.name;
+    html += '<div id="news-feed-btn-' + f.name.replace(/\s/g,'_') + '"'
+      + ' class="news-feed-btn' + (active ? ' active' : '') + '"'
+      + ' data-feedidx="' + idx + '"'
+      + ' onclick="newsSelectFeedByIdx(+this.dataset.feedidx)">'
+      + f.name + '</div>';
+  });
+  list.innerHTML = html;
 }
 
 function newsSelectFeedByIdx(idx) {
-  const feeds = NEWS_FEEDS.filter(f => f.category === _newsActiveCategory);
-  const feed = feeds[idx];
-  if (feed) newsSelectFeed(feed);
+  const feeds = NEWS_FEEDS.filter(function(f) { return f.category === _newsActiveCategory; });
+  if (feeds[idx]) newsSelectFeed(feeds[idx]);
 }
 
 async function newsSetCategory(cat) {
   _newsActiveCategory = cat;
   _newsActiveFeed = null;
-  document.querySelectorAll('[id^="news-cat-"]').forEach(b => {
+  document.querySelectorAll('[id^="news-cat-"]').forEach(function(b) {
     const active = b.id === 'news-cat-' + cat;
     b.style.borderBottomColor = active ? 'var(--blue)' : 'transparent';
     b.style.color = active ? 'var(--text)' : 'var(--text-3)';
     b.style.fontWeight = active ? '600' : '400';
   });
   _renderNewsFeedList();
-  const firstFeed = NEWS_FEEDS.find(f => f.category === cat);
+  const firstFeed = NEWS_FEEDS.find(function(f) { return f.category === cat; });
   if (firstFeed) await newsSelectFeed(firstFeed);
 }
 
 async function newsSelectFeed(feed) {
-  if (typeof feed === 'string') feed = JSON.parse(feed);
   _newsActiveFeed = feed;
   _renderNewsFeedList();
 
   const container = document.getElementById('news-article-list');
   if (!container) return;
 
-  container.innerHTML = `
-    <div style="padding:56px 0;text-align:center">
-      <div style="width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--blue);
-                  border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px"></div>
-      <div style="font-size:12px;color:var(--text-3)">Loading ${feed.name}…</div>
-    </div>`;
+  container.innerHTML =
+    '<div style="padding:56px 0;text-align:center">'
+    + '<div style="width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px"></div>'
+    + '<div style="font-size:12px;color:var(--text-3)">Loading ' + feed.name + '\u2026</div>'
+    + '</div>';
 
-  const items = await fetchRSSFeed(feed);
+  const items = await fetchRSSFeed(feed.url, feed.name);
 
   if (!items.length) {
-    container.innerHTML = `
-      <div style="padding:72px 0;text-align:center">
-        <div style="font-size:36px;margin-bottom:14px">📡</div>
-        <div style="font-size:14px;font-weight:600;color:var(--text-2);margin-bottom:6px">Feed unavailable</div>
-        <div style="font-size:12px;color:var(--text-3)">${feed.name} could not be loaded</div>
-      </div>`;
+    container.innerHTML =
+      '<div style="padding:72px 0;text-align:center">'
+      + '<div style="font-size:36px;margin-bottom:14px">\uD83D\uDCE1</div>'
+      + '<div style="font-size:14px;font-weight:600;color:var(--text-2);margin-bottom:6px">Feed unavailable</div>'
+      + '<div style="font-size:12px;color:var(--text-3)">' + feed.name + ' could not be loaded right now</div>'
+      + '</div>';
     return;
   }
 
-  // Store links in a window variable so onclick can safely reference by index
-  window._newsLinks = items.map(it => it.link);
+  // Store links safely — never embed URLs in HTML attributes
+  window._newsLinks = items.map(function(it) { return it.link; });
 
-  const rows = items.map((item, i) => {
-    const meta = [item.source, item.date].filter(Boolean).join(' · ');
-    return '<div class="news-rss-item" data-idx="' + i + '" onclick="if(window._newsLinks[' + i + '])window.open(window._newsLinks[' + i + '],\'_blank\')">'
+  let rows = '<div style="padding-top:28px">'
+    + '<div style="font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:20px">'
+    + feed.name + ' &nbsp;\u00B7\u00A0 ' + items.length + ' articles</div>';
+
+  items.forEach(function(item, i) {
+    const meta = [item.source, item.date].filter(Boolean).join(' \u00B7 ');
+    rows += '<div class="news-rss-item" data-idx="' + i + '" onclick="var l=window._newsLinks[+this.dataset.idx];if(l)window.open(l,\'_blank\')">'
       + '<div style="flex-shrink:0;width:26px;height:26px;border-radius:5px;background:var(--card);border:1px solid var(--border);'
       + 'display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text-3)">' + (i+1) + '</div>'
       + '<div style="flex:1;min-width:0">'
       + '<div style="font-size:14px;font-weight:500;color:var(--text);line-height:1.6;margin-bottom:6px">' + item.title + '</div>'
-      + '<div style="font-size:11px;color:var(--text-3);display:flex;align-items:center;gap:5px">'
-      + '<span>' + meta + '</span>'
-      + '<span style="opacity:.4">·</span><span style="color:var(--blue)">Read ↗</span>'
-      + '</div></div></div>';
-  }).join('');
+      + '<div style="font-size:11px;color:var(--text-3)">' + meta + ' \u00B7 <span style="color:var(--blue)">Read \u2197</span></div>'
+      + '</div></div>';
+  });
 
-  container.innerHTML = '<div style="padding-top:28px">'
-    + '<div style="font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:20px">'
-    + feed.name + ' &nbsp;·&nbsp; ' + items.length + ' articles</div>'
-    + rows + '</div>';
+  rows += '</div>';
+  container.innerHTML = rows;
 }
 
 
