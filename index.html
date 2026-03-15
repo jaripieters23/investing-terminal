@@ -69,7 +69,7 @@ html{overflow-x:hidden;max-width:100vw}body{display:flex;flex-direction:column;o
 #holdings-page{padding:calc(var(--header-h) + 20px) 24px 40px}
 #stock-page{display:none;flex:1;overflow-y:auto;background:var(--bg)}
 #pnl-page{display:none;flex:1;overflow-y:auto;background:var(--bg)}
-#news-page{display:none;flex:1;flex-direction:column;overflow:hidden;background:var(--bg);padding-top:var(--header-h)}
+#news-page{display:none;flex-direction:column;background:var(--bg);height:calc(100vh - var(--header-h));box-sizing:border-box}
 #upload-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;flex:1;gap:16px}
 #upload-screen h2{font-size:20px;font-weight:600}
 #upload-screen p{font-size:13px;color:var(--text-3);max-width:360px;line-height:1.6}
@@ -323,8 +323,8 @@ td{padding:8px 16px;vertical-align:middle}
 .news-feed-btn{padding:8px 10px;border-radius:6px;font-size:11px;color:var(--text-3);cursor:pointer;margin-bottom:2px;line-height:1.4;transition:all .15s}
 .news-feed-btn:hover{background:var(--card-hover);color:var(--text)}
 .news-feed-btn.active{background:rgba(79,124,247,.12);color:var(--blue);font-weight:600}
-.news-rss-item{padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:opacity .15s}
-.news-rss-item:hover .news-rss-title{color:var(--blue)}
+.news-rss-item{display:flex;gap:16px;align-items:flex-start;padding:18px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:opacity .12s}
+.news-rss-item:hover{opacity:.65}
 .news-rss-item:last-child{border-bottom:none}
 .news-rss-title{font-size:13px;font-weight:500;color:var(--text);line-height:1.5;margin-bottom:4px}
 .news-rss-meta{font-size:11px;color:var(--text-3)}
@@ -427,7 +427,7 @@ input,textarea,select{font-size:16px!important}
 html{scroll-padding-top:var(--header-h)}
 #dashboard{padding:calc(var(--header-h) + 14px) 14px calc(70px + env(safe-area-inset-bottom,0px));min-height:100vh;background:var(--bg)}
 #scan-page,#watchlist-page,#settings-page,#pnl-page{padding-top:calc(var(--header-h) + 8px);padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}
-#news-page{padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}
+#news-page{padding-bottom:calc(70px + env(safe-area-inset-bottom,0px));height:calc(100vh - var(--header-h));box-sizing:border-box}
   #upload-screen{padding-bottom:calc(80px + env(safe-area-inset-bottom,0px))}
 .scan-header{padding:8px 14px 0}.scan-controls{margin:12px 14px 0;grid-template-columns:1fr auto}.scan-btn.secondary{grid-column:1/-1}
 #scan-queue{margin:10px 14px 0}#scan-results{padding:12px 14px 80px}
@@ -794,7 +794,7 @@ function showPage(page, skipHistory) {
   }
   const targetId = map[page] || page;
   const el = document.getElementById(targetId);
-  if (el) el.style.display = (targetId === 'dashboard' || targetId === 'scan-page' || targetId === 'watchlist-page' || targetId === 'settings-page' || targetId === 'stock-page' || targetId === 'pnl-page' || targetId === 'holdings-page' || targetId === 'news-page') ? 'block' : 'flex';
+  if (el) el.style.display = (targetId === 'news-page') ? 'flex' : (targetId === 'dashboard' || targetId === 'scan-page' || targetId === 'watchlist-page' || targetId === 'settings-page' || targetId === 'stock-page' || targetId === 'pnl-page' || targetId === 'holdings-page') ? 'block' : 'flex';
 
   // Upload screen: show if no portfolio loaded and page is dashboard
   if (page === 'dashboard' && !portfolioRows) {
@@ -2570,27 +2570,35 @@ async function renderNewsPage() {
 
   page.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+
+      <!-- sticky sub-header: title + tabs -->
       <div style="flex-shrink:0;padding:20px 24px 0;border-bottom:1px solid var(--border);background:var(--bg)">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
           <div style="font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.3px">Financial News</div>
           <div style="font-size:11px;color:var(--text-3)">via RSS · 15 min cache</div>
         </div>
         <div style="display:flex;gap:0">
-          ${categories.map(c => `
-            <button onclick="newsSetCategory('${c}')" id="news-cat-${c}"
-              style="background:none;border:none;border-bottom:2px solid ${c === _newsActiveCategory ? 'var(--blue)' : 'transparent'};
-                color:${c === _newsActiveCategory ? 'var(--text)' : 'var(--text-3)'};
-                font-size:13px;font-weight:${c === _newsActiveCategory ? '600' : '400'};
-                padding:0 0 10px;margin-right:24px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s">${c}</button>
+          ${categories.map(cat => `
+            <button onclick="newsSetCategory('${cat}')" id="news-cat-${cat}"
+              style="background:none;border:none;border-bottom:2px solid ${cat === _newsActiveCategory ? 'var(--blue)' : 'transparent'};
+                color:${cat === _newsActiveCategory ? 'var(--text)' : 'var(--text-3)'};
+                font-size:13px;font-weight:${cat === _newsActiveCategory ? '600' : '400'};
+                padding:0 0 10px;margin-right:24px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s">${cat}</button>
           `).join('')}
         </div>
       </div>
-      <div style="display:flex;flex:1;overflow:hidden">
+
+      <!-- body: sidebar + articles, fills remaining height -->
+      <div style="flex:1;display:flex;overflow:hidden;min-height:0">
         <div id="news-feed-list"
-          style="width:176px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;padding:14px 8px;background:var(--card)">
+          style="width:176px;flex-shrink:0;border-right:1px solid var(--border);
+                 overflow-y:auto;padding:14px 8px;background:var(--card)">
         </div>
-        <div id="news-article-list" style="flex:1;overflow-y:auto;padding:0 32px 40px;max-width:860px"></div>
+        <div id="news-article-list"
+          style="flex:1;overflow-y:auto;padding:0 32px 40px;max-width:860px">
+        </div>
       </div>
+
     </div>`;
 
   _renderNewsFeedList();
@@ -2602,14 +2610,20 @@ function _renderNewsFeedList() {
   const list = document.getElementById('news-feed-list');
   if (!list) return;
   const feeds = NEWS_FEEDS.filter(f => f.category === _newsActiveCategory);
-  list.innerHTML = `
-    <div style="font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;padding:2px 8px 10px">Sources</div>
-    ${feeds.map(f => `
-      <div id="news-feed-btn-${f.name.replace(/\s/g,'_')}"
-        class="news-feed-btn ${_newsActiveFeed?.name === f.name ? 'active' : ''}"
-        onclick='newsSelectFeed(${JSON.stringify(f).replace(/'/g,"&#39;")})'>
-        ${f.name}
-      </div>`).join('')}`;
+  list.innerHTML = '<div style="font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;padding:2px 8px 10px">Sources</div>'
+    + feeds.map(f => {
+        const safeId = f.name.replace(/\s/g,'_');
+        const isActive = _newsActiveFeed?.name === f.name;
+        return '<div id="news-feed-btn-' + safeId + '"'
+          + ' class="news-feed-btn' + (isActive ? ' active' : '') + '"'
+          + ' onclick="newsSelectFeedByName(' + JSON.stringify(f.name) + ')">'
+          + f.name + '</div>';
+      }).join('');
+}
+
+async function newsSelectFeedByName(name) {
+  const feed = NEWS_FEEDS.find(f => f.name === name);
+  if (feed) await newsSelectFeed(feed);
 }
 
 async function newsSetCategory(cat) {
@@ -2653,27 +2667,26 @@ async function newsSelectFeed(feed) {
     return;
   }
 
-  container.innerHTML = `
-    <div style="padding-top:28px">
-      <div style="font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:20px">
-        ${feed.name} &nbsp;·&nbsp; ${items.length} articles
-      </div>
-      ${items.map((item, i) => `
-        <div onclick="window.open('${item.link.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;')}','_blank')"
-          style="padding:18px 0;border-bottom:1px solid var(--border);cursor:pointer;display:flex;gap:16px;align-items:flex-start;transition:opacity .12s"
-          onmouseenter="this.style.opacity='.65'" onmouseleave="this.style.opacity='1'">
-          <div style="flex-shrink:0;width:26px;height:26px;border-radius:5px;background:var(--card);border:1px solid var(--border);
-                      display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text-3);margin-top:3px">${i+1}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:14px;font-weight:500;color:var(--text);line-height:1.6;margin-bottom:7px">${item.title}</div>
-            <div style="font-size:11px;color:var(--text-3);display:flex;align-items:center;gap:5px">
-              <span>${item.source}</span>
-              ${item.date ? `<span style="opacity:.4">·</span><span>${item.date}</span>` : ''}
-              <span style="opacity:.4">·</span><span style="color:var(--blue)">Read ↗</span>
-            </div>
-          </div>
-        </div>`).join('')}
-    </div>`;
+  // Store links in a window variable so onclick can safely reference by index
+  window._newsLinks = items.map(it => it.link);
+
+  const rows = items.map((item, i) => {
+    const meta = [item.source, item.date].filter(Boolean).join(' · ');
+    return '<div class="news-rss-item" data-idx="' + i + '" onclick="if(window._newsLinks[' + i + '])window.open(window._newsLinks[' + i + '],\'_blank\')">'
+      + '<div style="flex-shrink:0;width:26px;height:26px;border-radius:5px;background:var(--card);border:1px solid var(--border);'
+      + 'display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text-3)">' + (i+1) + '</div>'
+      + '<div style="flex:1;min-width:0">'
+      + '<div style="font-size:14px;font-weight:500;color:var(--text);line-height:1.6;margin-bottom:6px">' + item.title + '</div>'
+      + '<div style="font-size:11px;color:var(--text-3);display:flex;align-items:center;gap:5px">'
+      + '<span>' + meta + '</span>'
+      + '<span style="opacity:.4">·</span><span style="color:var(--blue)">Read ↗</span>'
+      + '</div></div></div>';
+  }).join('');
+
+  container.innerHTML = '<div style="padding-top:28px">'
+    + '<div style="font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:20px">'
+    + feed.name + ' &nbsp;·&nbsp; ' + items.length + ' articles</div>'
+    + rows + '</div>';
 }
 
 
