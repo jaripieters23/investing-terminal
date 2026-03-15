@@ -671,6 +671,54 @@ html{scroll-padding-top:var(--header-h)}
       <div class="settings-row"><div class="settings-row-label"><strong>Clear watchlist</strong><span>Permanently removes all stocks from your watchlist.</span></div><div class="settings-row-control"><button class="settings-save-btn danger" onclick="confirmClearWatchlist()">Clear watchlist</button></div></div>
     </div>
     <div class="settings-section">
+      <div class="settings-section-header">
+        <div class="settings-section-title">☁️ Cloud Sync — Watchlist</div>
+        <div class="settings-section-sub">Sync your watchlist across devices via Supabase (free). <a href="https://supabase.com" target="_blank" style="color:var(--blue)">Create a free project</a>, then paste your project URL and anon key below. <span style="color:var(--text-2)">Setup: in Supabase SQL editor run the one-time table creation query shown below.</span></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <strong>Supabase Project URL</strong>
+          <span>e.g. https://xxxx.supabase.co</span>
+        </div>
+        <div class="settings-row-control" style="max-width:320px;width:100%">
+          <input type="text" id="supabase-url" class="settings-input" placeholder="https://xxxx.supabase.co"
+            style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:6px 10px;font-family:'Inter',sans-serif"
+            onchange="saveSupabaseConfig()">
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <strong>Supabase Anon Key</strong>
+          <span>Found in Project Settings → API</span>
+        </div>
+        <div class="settings-row-control" style="max-width:320px;width:100%">
+          <input type="password" id="supabase-key" class="settings-input" placeholder="eyJ..."
+            style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:6px 10px;font-family:'Inter',sans-serif"
+            onchange="saveSupabaseConfig()">
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <strong>SQL setup</strong>
+          <span style="font-family:monospace;font-size:10px;color:var(--blue);word-break:break-all">create table watchlist_sync (id text primary key, data jsonb, updated_at timestamptz default now());</span>
+        </div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" id="supabase-test-btn" onclick="testSupabaseConnection()">Test</button>
+          <span class="test-result" id="supabase-test-result"></span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <strong>Sync status</strong>
+          <span id="supabase-sync-status">Not configured</span>
+        </div>
+        <div class="settings-row-control">
+          <button class="settings-save-btn secondary" onclick="supabasePush()">Push</button>
+          <button class="settings-save-btn secondary" onclick="supabasePull()">Pull</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
       <div class="settings-section-header"><div class="settings-section-title">About</div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>Scoring and analysis via <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b for scoring, llama-3.1-8b for detail pages). Financial data split by free tier: <strong style="color:var(--blue)">Finnhub</strong> (quotes, profiles, financials, metrics, news, insider, recommendations, earnings — 60 req/min, no daily cap) + <strong style="color:var(--amber)">FMP</strong> only for data unavailable free on Finnhub: ROIC/EV·EBITDA key-metrics, price targets, forward estimates (250 req/day, cached 24hr). All via Cloudflare Workers — no API keys in the app.</span></div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>Quality scoring</strong><span>Based on Pieter Slegers' <em>Compounding Quality</em>. 13 quantitative criteria (rule-based, 60%) + 7 qualitative factors scored by AI (40%). Final score /100.</span></div></div>
@@ -5045,6 +5093,150 @@ function showRestoredBanner() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// SUPABASE CLOUD SYNC
+// ═══════════════════════════════════════════════════════════════
+
+// Device ID — stable per browser, used as the row key
+const _deviceId = (() => {
+  let id = localStorage.getItem('pa_deviceId');
+  if (!id) { id = 'dev_' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('pa_deviceId', id); }
+  return id;
+})();
+
+function _sbConfig() {
+  const url = localStorage.getItem('pa_supabaseUrl') || '';
+  const key = localStorage.getItem('pa_supabaseKey') || '';
+  return { url: url.trim().replace(/\/$/, ''), key: key.trim() };
+}
+
+function saveSupabaseConfig() {
+  const url = document.getElementById('supabase-url')?.value || '';
+  const key = document.getElementById('supabase-key')?.value || '';
+  localStorage.setItem('pa_supabaseUrl', url.trim());
+  localStorage.setItem('pa_supabaseKey', key.trim());
+  _updateSyncStatus('Config saved');
+}
+
+function _updateSyncStatus(msg) {
+  const el = document.getElementById('supabase-sync-status');
+  if (el) el.textContent = msg;
+}
+
+async function _sbRequest(method, body) {
+  const { url, key } = _sbConfig();
+  if (!url || !key) throw new Error('Supabase not configured');
+  const res = await fetch(url + '/rest/v1/watchlist_sync', {
+    method,
+    headers: {
+      'apikey': key,
+      'Authorization': 'Bearer ' + key,
+      'Content-Type': 'application/json',
+      'Prefer': method === 'POST' ? 'resolution=merge-duplicates' : '',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error('Supabase ' + res.status + ': ' + err.slice(0, 120));
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+async function supabasePush() {
+  try {
+    _updateSyncStatus('Pushing…');
+    const payload = { id: _deviceId, data: { watchlist }, updated_at: new Date().toISOString() };
+    await _sbRequest('POST', payload);
+    _updateSyncStatus('✓ Pushed ' + watchlist.length + ' items · ' + new Date().toLocaleTimeString());
+  } catch(e) {
+    _updateSyncStatus('✗ Push failed: ' + e.message);
+    console.error('[Supabase push]', e);
+  }
+}
+
+async function supabasePull() {
+  try {
+    _updateSyncStatus('Pulling…');
+    const { url, key } = _sbConfig();
+    if (!url || !key) throw new Error('Not configured');
+    // Fetch all rows, use the most recently updated one
+    const res = await fetch(url + '/rest/v1/watchlist_sync?select=id,data,updated_at&order=updated_at.desc&limit=10', {
+      headers: { 'apikey': key, 'Authorization': 'Bearer ' + key }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    if (!rows.length) { _updateSyncStatus('No data found in Supabase'); return; }
+    // Merge all rows — union by stock name, newest entry wins
+    const merged = {};
+    [...rows].reverse().forEach(row => {
+      (row.data?.watchlist || []).forEach(item => { merged[item.name] = item; });
+    });
+    watchlist = Object.values(merged);
+    saveWatchlist();
+    renderWatchlistTable();
+    _updateSyncStatus('✓ Pulled ' + watchlist.length + ' items · ' + new Date().toLocaleTimeString());
+  } catch(e) {
+    _updateSyncStatus('✗ Pull failed: ' + e.message);
+    console.error('[Supabase pull]', e);
+  }
+}
+
+async function testSupabaseConnection() {
+  const btn = document.getElementById('supabase-test-btn');
+  const res = document.getElementById('supabase-test-result');
+  if (btn) btn.textContent = 'Testing…';
+  if (res) res.textContent = '';
+  try {
+    saveSupabaseConfig();
+    const { url, key } = _sbConfig();
+    if (!url || !key) throw new Error('Enter URL and key first');
+    const r = await fetch(url + '/rest/v1/watchlist_sync?limit=1', {
+      headers: { 'apikey': key, 'Authorization': 'Bearer ' + key }
+    });
+    if (!res) return;
+    if (r.ok) {
+      res.textContent = '✓ Connected';
+      res.style.color = 'var(--green)';
+      _updateSyncStatus('Connected — ready to sync');
+    } else {
+      const txt = await r.text();
+      if (txt.includes('relation') && txt.includes('does not exist')) {
+        res.textContent = '⚠ Table missing — run the SQL setup query above';
+        res.style.color = 'var(--amber)';
+      } else {
+        throw new Error('HTTP ' + r.status + ': ' + txt.slice(0, 80));
+      }
+    }
+  } catch(e) {
+    if (res) { res.textContent = '✗ ' + e.message; res.style.color = 'var(--red)'; }
+    console.error('[Supabase test]', e);
+  } finally {
+    if (btn) btn.textContent = 'Test';
+  }
+}
+
+// Auto-sync: push to Supabase whenever watchlist is saved (debounced)
+let _sbPushTimer = null;
+const _origSaveWLForSupabase = saveWatchlist;
+saveWatchlist = function() {
+  _origSaveWLForSupabase();
+  const { url, key } = _sbConfig();
+  if (url && key) {
+    clearTimeout(_sbPushTimer);
+    _sbPushTimer = setTimeout(supabasePush, 2000); // debounce 2s
+  }
+};
+
+function _initSupabaseUI() {
+  const { url, key } = _sbConfig();
+  const urlEl = document.getElementById('supabase-url');
+  const keyEl = document.getElementById('supabase-key');
+  if (urlEl && url) urlEl.value = url;
+  if (keyEl && key) keyEl.value = key;
+  if (url && key) _updateSyncStatus('Configured — use Push/Pull to sync');
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
 window.onerror = function(msg, src, line, col, err) {
@@ -5067,6 +5259,14 @@ try {
   } else {
     showPage('dashboard');
   }
+  // Init Supabase UI and auto-pull in background
+  setTimeout(() => {
+    _initSupabaseUI();
+    const { url, key } = _sbConfig();
+    if (url && key) {
+      supabasePull().catch(() => {});
+    }
+  }, 500);
 } catch(e) {
   console.error('[INIT CRASH]', e);
   const el = document.getElementById('init-error-banner');
