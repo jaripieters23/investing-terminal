@@ -317,6 +317,22 @@ td{padding:8px 16px;vertical-align:middle}
 .holdings-sub-header:hover{background:rgba(255,255,255,.04)}
 .news-headline{font-size:12px;color:var(--text-2);line-height:1.5;flex:1}
 .news-date{font-size:10px;color:var(--text-3);margin-top:2px}
+.news-cat-btn{background:transparent;border:1px solid var(--border);color:var(--text-3);border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
+.news-cat-btn:hover,.news-cat-btn.active{background:var(--blue);border-color:var(--blue);color:#fff}
+.news-feed-btn{padding:8px 10px;border-radius:6px;font-size:11px;color:var(--text-3);cursor:pointer;margin-bottom:2px;line-height:1.4;transition:all .15s}
+.news-feed-btn:hover{background:var(--card-hover);color:var(--text)}
+.news-feed-btn.active{background:rgba(79,124,247,.12);color:var(--blue);font-weight:600}
+.news-rss-item{padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:opacity .15s}
+.news-rss-item:hover .news-rss-title{color:var(--blue)}
+.news-rss-item:last-child{border-bottom:none}
+.news-rss-title{font-size:13px;font-weight:500;color:var(--text);line-height:1.5;margin-bottom:4px}
+.news-rss-meta{font-size:11px;color:var(--text-3)}
+.news-co-item{display:flex;flex-direction:column;gap:4px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.news-co-item:hover .news-co-title{color:var(--blue)}
+.news-co-item:last-child{border-bottom:none}
+.news-co-title{font-size:12px;font-weight:500;color:var(--text-2);line-height:1.5}
+.news-co-summary{font-size:11px;color:var(--text-3);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.news-co-meta{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--text-3)}
 .risk-tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,.08);color:#f87171;border:1px solid rgba(239,68,68,.15);margin:3px 3px 0 0}
 .pe-chart-wrap{position:relative;height:160px;margin-top:8px}
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50}
@@ -471,6 +487,7 @@ html{scroll-padding-top:var(--header-h)}
     <div class="nav-label" style="margin-top:10px">Tools</div>
     <div class="nav-item" id="nav-scan"      onclick="showPage('scan')"><span class="nav-icon">&#128269;</span> Stock Scan</div>
     <div class="nav-item" id="nav-watchlist" onclick="showPage('watchlist')"><span class="nav-icon">&#11088;</span> Watchlist<span id="wl-nav-badge" style="margin-left:auto;background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px;display:none"></span></div>
+    <div class="nav-item" id="nav-news"      onclick="showPage('news')"><span class="nav-icon">&#128240;</span> News</div>
     <div class="nav-label" style="margin-top:10px">App</div>
     <div class="nav-item" id="nav-settings"  onclick="showPage('settings')"><span class="nav-icon">&#9881;</span> Settings</div>
   </nav>
@@ -660,6 +677,7 @@ html{scroll-padding-top:var(--header-h)}
 
 <div id="pnl-page"></div>
 <div id="stock-page"></div>
+<div id="news-page" style="display:none"></div>
 </div>
 
 <div class="mobile-overlay" id="mobile-overlay" onclick="closeMobileMenu()"></div>
@@ -675,6 +693,10 @@ html{scroll-padding-top:var(--header-h)}
   <button class="mobile-nav-item" id="mnav-watchlist" onclick="showPage('watchlist')">
     <div class="m-icon-wrap"><svg class="m-svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span class="mobile-nav-badge" id="wl-mob-badge" style="display:none"></span></div>
     <span class="m-label">Watchlist</span>
+  </button>
+  <button class="mobile-nav-item" id="mnav-news" onclick="showPage('news')">
+    <div class="m-icon-wrap"><svg class="m-svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a4 4 0 0 1-4-4V6"/><path d="M10 7h8M10 11h8M10 15h5"/></svg></div>
+    <span class="m-label">News</span>
   </button>
   <button class="mobile-nav-item" id="mnav-settings" onclick="showPage('settings')">
     <div class="m-icon-wrap"><svg class="m-svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
@@ -757,11 +779,11 @@ function _trackCall(api) {
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════
 function showPage(page, skipHistory) {
-  ['dashboard','scan-page','watchlist-page','settings-page','stock-page','pnl-page','upload-screen','holdings-page'].forEach(id => {
+  ['dashboard','scan-page','watchlist-page','settings-page','stock-page','pnl-page','upload-screen','holdings-page','news-page'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
-  const map = { dashboard:'dashboard', scan:'scan-page', watchlist:'watchlist-page', settings:'settings-page', stock:'stock-page', pnl:'pnl-page', holdings:'holdings-page' };
+  const map = { dashboard:'dashboard', scan:'scan-page', watchlist:'watchlist-page', settings:'settings-page', stock:'stock-page', pnl:'pnl-page', holdings:'holdings-page', news:'news-page' };
   // holdings-{key} pages route to holdings-page and render appropriate content
   let holdingsKey = null;
   if (page.startsWith('holdings-')) {
@@ -785,8 +807,8 @@ function showPage(page, skipHistory) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.nav-sub-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.mobile-nav-item').forEach(n => n.classList.remove('active'));
-  const navMap  = { dashboard:'nav-dashboard', scan:'nav-scan', watchlist:'nav-watchlist', settings:'nav-settings' };
-  const mnavMap = { dashboard:'mnav-dashboard', scan:'mnav-scan', watchlist:'mnav-watchlist', settings:'mnav-settings' };
+  const navMap  = { dashboard:'nav-dashboard', scan:'nav-scan', watchlist:'nav-watchlist', settings:'nav-settings', news:'nav-news' };
+  const mnavMap = { dashboard:'mnav-dashboard', scan:'mnav-scan', watchlist:'mnav-watchlist', settings:'mnav-settings', news:'mnav-news' };
   if (navMap[page]) { document.getElementById(navMap[page])?.classList.add('active'); }
   if (holdingsKey) {
     document.getElementById('nav-holdings-parent')?.classList.add('active');
@@ -800,6 +822,7 @@ function showPage(page, skipHistory) {
   document.getElementById('topbar-title').textContent = holdingsKey ? (hcatTitles[holdingsKey] || 'Holdings') : (titles[page] || 'Portfolio');
 
   if (page === 'watchlist') renderWatchlistTable();
+  if (page === 'news') renderNewsPage();
   if (page === 'settings') refreshSettingsUI();
   closeMobileMenu();
 }
@@ -2481,6 +2504,178 @@ function renderScanResults() {
 
 
 // ═══════════════════════════════════════════════════════════════
+// NEWS PAGE — RSS FEEDS
+// ═══════════════════════════════════════════════════════════════
+
+const NEWS_FEEDS = [
+  { name: 'FT Markets',        url: 'https://www.ft.com/markets?format=rss',                   category: 'Markets' },
+  { name: 'Reuters Business',  url: 'https://feeds.reuters.com/reuters/businessNews',           category: 'Markets' },
+  { name: 'Bloomberg Markets', url: 'https://feeds.bloomberg.com/markets/news.rss',             category: 'Markets' },
+  { name: 'WSJ Markets',       url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',            category: 'Markets' },
+  { name: 'CNBC Finance',      url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664', category: 'Markets' },
+  { name: 'Seeking Alpha',     url: 'https://seekingalpha.com/feed.xml',                        category: 'Analysis' },
+  { name: 'Motley Fool',       url: 'https://www.fool.com/feeds/index.aspx',                    category: 'Analysis' },
+  { name: 'Investopedia',      url: 'https://www.investopedia.com/feedbuilder/feed/getfeed/?feedName=rss_headline', category: 'Analysis' },
+];
+
+const _newsCache = {};
+const NEWS_CACHE_TTL = 15 * 60 * 1000; // 15 min
+
+async function fetchRSSFeed(feed) {
+  const now = Date.now();
+  if (_newsCache[feed.url] && now - _newsCache[feed.url].ts < NEWS_CACHE_TTL)
+    return _newsCache[feed.url].items;
+
+  try {
+    // Use allorigins to proxy RSS (XML) — allowed for RSS, not blocked like Yahoo
+    const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(feed.url);
+    const res  = await fetch(proxy);
+    const data = await res.json();
+    const xml  = data?.contents;
+    if (!xml) return [];
+
+    const parser = new DOMParser();
+    const doc    = parser.parseFromString(xml, 'text/xml');
+    const items  = [...doc.querySelectorAll('item')].slice(0, 8).map(item => ({
+      title:   item.querySelector('title')?.textContent?.trim() || '',
+      link:    item.querySelector('link')?.textContent?.trim() || '',
+      date:    (() => {
+        const raw = item.querySelector('pubDate')?.textContent || item.querySelector('dc\\:date')?.textContent || '';
+        if (!raw) return '';
+        const d = new Date(raw);
+        return isNaN(d) ? raw.slice(0, 16) : d.toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+      })(),
+      source:  feed.name,
+    }));
+
+    _newsCache[feed.url] = { ts: now, items };
+    return items;
+  } catch(e) {
+    console.warn('[RSS] failed:', feed.name, e.message);
+    return [];
+  }
+}
+
+let _newsActiveFeed = null;
+let _newsActiveCategory = 'Markets';
+
+async function renderNewsPage() {
+  const page = document.getElementById('news-page');
+  if (!page) return;
+
+  const categories = [...new Set(NEWS_FEEDS.map(f => f.category))];
+  if (!_newsActiveCategory) _newsActiveCategory = categories[0];
+
+  // Render shell immediately
+  page.innerHTML = `
+    <div class="scan-header">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="font-size:18px;font-weight:700;color:var(--text)">📰 Financial News</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${categories.map(c => `<button onclick="newsSetCategory('${c}')" id="news-cat-${c}" class="news-cat-btn ${c === _newsActiveCategory ? 'active' : ''}">${c}</button>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:0;height:calc(100vh - var(--header-h) - 60px);overflow:hidden">
+      <div id="news-feed-list" style="width:200px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;padding:8px"></div>
+      <div id="news-article-list" style="flex:1;overflow-y:auto;padding:0 16px 16px"></div>
+    </div>`;
+
+  _renderNewsFeedList();
+  const firstFeed = NEWS_FEEDS.find(f => f.category === _newsActiveCategory);
+  if (firstFeed) await newsSelectFeed(firstFeed);
+}
+
+function _renderNewsFeedList() {
+  const list = document.getElementById('news-feed-list');
+  if (!list) return;
+  const feeds = NEWS_FEEDS.filter(f => f.category === _newsActiveCategory);
+  list.innerHTML = feeds.map(f => `
+    <div id="news-feed-btn-${f.name.replace(/\s/g,'_')}"
+      class="news-feed-btn ${_newsActiveFeed?.name === f.name ? 'active' : ''}"
+      onclick="newsSelectFeed(${JSON.stringify(f)})">
+      ${f.name}
+    </div>`).join('');
+}
+
+async function newsSetCategory(cat) {
+  _newsActiveCategory = cat;
+  _newsActiveFeed = null;
+  document.querySelectorAll('.news-cat-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('news-cat-' + cat)?.classList.add('active');
+  _renderNewsFeedList();
+  const firstFeed = NEWS_FEEDS.find(f => f.category === cat);
+  if (firstFeed) await newsSelectFeed(firstFeed);
+}
+
+async function newsSelectFeed(feed) {
+  if (typeof feed === 'string') feed = JSON.parse(feed);
+  _newsActiveFeed = feed;
+  _renderNewsFeedList();
+
+  const container = document.getElementById('news-article-list');
+  if (!container) return;
+  container.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-3);font-size:13px">Loading ${feed.name}…</div>`;
+
+  const items = await fetchRSSFeed(feed);
+
+  if (!items.length) {
+    container.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-3);font-size:13px">No articles loaded — feed may be unavailable.</div>`;
+    return;
+  }
+
+  container.innerHTML = items.map(item => `
+    <div class="news-rss-item" onclick="window.open('${item.link.replace(/'/g,"\\'")}','_blank')">
+      <div class="news-rss-title">${item.title}</div>
+      <div class="news-rss-meta">${item.source} · ${item.date}</div>
+    </div>`).join('');
+}
+
+// Company news for stock detail — fetches Finnhub company news for a ticker
+async function fetchCompanyNews(ticker) {
+  if (!ticker) return [];
+  try {
+    const items = await finnhubGet('/company-news?symbol=' + ticker + '&from=' + _dateStr(-30) + '&to=' + _dateStr(0));
+    return Array.isArray(items) ? items.slice(0, 12).map(n => ({
+      headline: n.headline,
+      summary:  n.summary || '',
+      url:      n.url || '',
+      date:     n.datetime ? new Date(n.datetime * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '',
+      source:   n.source || '',
+      sentiment: n.sentiment ?? null,
+    })) : [];
+  } catch(e) { return []; }
+}
+
+async function refreshCompanyNews(name, ticker, btn) {
+  const safeId = (ticker || name).replace(/\W/g, '_');
+  const body = document.getElementById('company-news-body-' + safeId);
+  if (!body) return;
+  if (btn && btn.tagName === 'BUTTON') btn.textContent = '↻ Loading…';
+  const items = await fetchCompanyNews(ticker);
+  if (!items.length) {
+    body.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:16px 0;text-align:center">No recent news found for ' + ticker + '</div>';
+    return;
+  }
+  body.innerHTML = items.map(n => {
+    const sentColor = n.sentiment === 'positive' ? 'var(--green)' : n.sentiment === 'negative' ? 'var(--red)' : 'var(--text-3)';
+    const sentLabel = n.sentiment === 'positive' ? '▲' : n.sentiment === 'negative' ? '▼' : '●';
+    const linkAttr  = n.url ? `onclick="window.open('${n.url.replace(/'/g,"\\'")}','_blank')"` : '';
+    return `<div class="news-co-item" ${linkAttr}>
+      <div class="news-co-title">${n.headline}</div>
+      ${n.summary ? `<div class="news-co-summary">${n.summary}</div>` : ''}
+      <div class="news-co-meta">
+        <span style="color:${sentColor}">${sentLabel}</span>
+        ${n.source ? `<span>${n.source}</span>` : ''}
+        ${n.date ? `<span>${n.date}</span>` : ''}
+        ${n.url ? `<span style="color:var(--blue)">↗ Read</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  if (btn && btn.tagName === 'BUTTON') btn.textContent = '↻ Refresh';
+}
+
+// ═══════════════════════════════════════════════════════════════
 // WATCHLIST
 // ═══════════════════════════════════════════════════════════════
 function saveWatchlist() {
@@ -2923,10 +3118,13 @@ async function fetchStockData(nameOrTicker, opts = {}) {
     fhEarnings,     // Finnhub /calendar/earnings    → upcoming earnings
     fhInsider,      // Finnhub /stock/insider-transactions → insider activity
     fhNews,         // Finnhub /company-news         → recent news
-    fmpKeyMetrics,  // FMP /stable/key-metrics       → ROIC, EV/EBITDA, FCF yield, net debt/EBITDA (not in Finnhub free)
+    fmpKeyMetrics,  // FMP /stable/key-metrics       → ROIC, EV/EBITDA, FCF yield, net debt/EBITDA
     fmpPriceTarget, // FMP /stable/price-target-consensus
     fmpAnalystEst,  // FMP /stable/analyst-estimates → forward EPS/Rev
-    yahooData,      // Yahoo Finance quoteSummary    → supplement for all missing fields
+    fmpIncome,      // FMP /stable/income-statement  → revenue, net income, gross profit, EBIT
+    fmpCashflow,    // FMP /stable/cash-flow-statement → operating CF, capex, FCF
+    fmpBalance,     // FMP /stable/balance-sheet-statement → debt, cash, equity
+    yahooData,      // Yahoo Finance → supplement (best-effort)
   ] = await Promise.all([
     finnhubGet('/stock/profile2?symbol='          + ticker).catch(() => ({})),
     finnhubGet('/quote?symbol='                   + ticker).catch(() => ({})),
@@ -2939,6 +3137,9 @@ async function fetchStockData(nameOrTicker, opts = {}) {
     fmpGet('/stable/key-metrics?symbol='          + ticker + '&period=annual&limit=5').catch(() => []),
     fmpGet('/stable/price-target-consensus?symbol=' + ticker).catch(() => null),
     lite ? Promise.resolve([])   : fmpGet('/stable/analyst-estimates?symbol='    + ticker + '&period=annual&limit=3').catch(() => []),
+    fmpGet('/stable/income-statement?symbol='     + ticker + '&period=annual&limit=5').catch(() => []),
+    fmpGet('/stable/cash-flow-statement?symbol='  + ticker + '&period=annual&limit=5').catch(() => []),
+    fmpGet('/stable/balance-sheet-statement?symbol=' + ticker + '&period=annual&limit=2').catch(() => []),
     yahooGet(ticker).catch(() => null),
   ]);
 
@@ -2963,16 +3164,49 @@ async function fetchStockData(nameOrTicker, opts = {}) {
   const sharesSeries   = fhSeries('weightedAvgSharesOutDiluted').length
     ? fhSeries('weightedAvgSharesOutDiluted') : fhSeries('weightedAvgSharesOut');
 
+  // ── FMP financial statements (primary fallback when Finnhub is empty) ──────
+  const fmpInc = Array.isArray(fmpIncome)   ? fmpIncome   : [];
+  const fmpCf  = Array.isArray(fmpCashflow) ? fmpCashflow : [];
+  const fmpBs  = Array.isArray(fmpBalance)  ? fmpBalance  : [];
+  const fi = fmpInc[0] || {};  // most recent income statement
+  const fc = fmpCf[0]  || {};  // most recent cash flow
+  const fb = fmpBs[0]  || {};  // most recent balance sheet
+
+  // FMP series helpers (newest first, same shape as Finnhub series)
+  const fmpRevs   = fmpInc.map(r => r.revenue).filter(v => v != null && v > 0);
+  const fmpNIs    = fmpInc.map(r => r.netIncome).filter(v => v != null);
+  const fmpEPSs   = fmpInc.map(r => r.eps ?? r.epsdiluted).filter(v => v != null && v > 0);
+  const fmpGPs    = fmpInc.map(r => r.grossProfit).filter(v => v != null);
+  const fmpEBITs  = fmpInc.map(r => r.operatingIncome ?? r.ebitda).filter(v => v != null);
+
+  // Use FMP data to fill wherever Finnhub returned empty arrays
+  const _rev      = revenues[0]    || fmpRevs[0]   || null;
+  const _prevRev  = revenues[1]    || fmpRevs[1]   || null;
+  const _ni       = netIncomes[0]  || fmpNIs[0]    || null;
+  const _gp       = grossProfits[0]|| fmpGPs[0]    || null;
+  const _opInc    = opIncomes[0]   || fmpEBITs[0]  || null;
+  const _opCf     = opCfSeries[0]  || fc.operatingCashFlow || null;
+  const _capex    = capexSeries[0] || (fc.capitalExpenditure != null ? Math.abs(fc.capitalExpenditure) : null) || null;
+  const _fcf      = fcfSeries[0]   || fc.freeCashFlow || (_opCf != null && _capex != null ? _opCf - _capex : null);
+  const _interest = interestSeries[0] || fi.interestExpense || null;
+  const _eps      = epsSeries[0]   || fmpEPSs[0]   || null;
+
+  // FMP revenue/EPS arrays for CAGR (merge Finnhub + FMP, deduplicate by length)
+  const _revSeries = revenues.length >= 3 ? revenues : (fmpRevs.length > revenues.length ? fmpRevs : revenues);
+  const _epsSeries = epsSeries.length >= 3 ? epsSeries : (fmpEPSs.length > epsSeries.length ? fmpEPSs : epsSeries);
+
+  // Balance sheet from FMP
+  const fmpTotalDebt = (fb.totalDebt ?? (fb.longTermDebt ?? 0) + (fb.shortTermDebt ?? 0)) || null;
+  const fmpCash      = fb.cashAndCashEquivalents ?? fb.cash ?? null;
+  const fmpEquity    = fb.totalStockholdersEquity ?? fb.stockholdersEquity ?? null;
+
   // ── Basic figures ─────────────────────────────────────────────────────────
   const livePrice = fhQuote?.c || null;   // current price
-  const rev       = revenues[0]    || null;
-  const prevRev   = revenues[1]    || null;
-  const netIncomeRaw = netIncomes[0] || null;
+  const rev       = _rev;
+  const prevRev   = _prevRev;
+  const netIncomeRaw = _ni;
 
-  const fcfRawVal = fcfSeries[0]
-    ?? (opCfSeries[0] != null && capexSeries[0] != null ? opCfSeries[0] - Math.abs(capexSeries[0]) : null);
-  const opIncome  = opIncomes[0] || null;
-  const interestExp = interestSeries[0] != null ? Math.abs(interestSeries[0]) : null;
+  const fcfRawVal = _fcf;
 
   function fmt(n) {
     if (n == null) return null;
@@ -2998,10 +3232,13 @@ async function fetchStockData(nameOrTicker, opts = {}) {
   const revGrowth = rev && prevRev && prevRev !== 0
     ? (((rev - prevRev) / Math.abs(prevRev)) * 100).toFixed(1) + '%' : null;
 
-  const grossProfitRaw = grossProfits[0] ?? null;
+  const grossProfitRaw = _gp ?? null;
   const grossMarginRaw = grossProfitRaw != null && rev
     ? grossProfitRaw / rev * 100
     : (m.grossMarginTTM != null ? m.grossMarginTTM : null);
+
+  const opIncome = _opInc;
+  const interestExp = _interest != null ? Math.abs(_interest) : null;
 
   const operatingMarginRaw = opIncome != null && rev
     ? opIncome / rev * 100
@@ -3009,13 +3246,13 @@ async function fetchStockData(nameOrTicker, opts = {}) {
 
   const fcfMargin = fcfRawVal != null && rev ? (fcfRawVal / rev * 100).toFixed(1) + '%' : null;
 
-  const revsAll = revenues.filter(v => v > 0);
+  const revsAll = _revSeries.filter(v => v > 0);
   const revN    = Math.min(4, revsAll.length - 1);
   const revCagr5yRaw = revsAll.length >= 2 && revsAll[revN] > 0
     ? (Math.pow(revsAll[0] / revsAll[revN], 1 / revN) - 1) * 100
     : (m['revenueGrowth5Y'] ?? m['revenueGrowthTTMYoy'] ?? null);
 
-  const epsAll = epsSeries.filter(v => v != null && v > 0);
+  const epsAll = _epsSeries.filter(v => v != null && v > 0);
   const epsN   = Math.min(4, epsAll.length - 1);
   const epsCagr5yRaw = epsAll.length >= 2 && epsAll[epsN] > 0
     ? (Math.pow(epsAll[0] / epsAll[epsN], 1 / epsN) - 1) * 100
@@ -3026,28 +3263,34 @@ async function fetchStockData(nameOrTicker, opts = {}) {
   const shareGrowth5yRaw = sharesAll.length >= 2 && sharesAll[shrN] > 0
     ? ((sharesAll[0] / sharesAll[shrN]) - 1) * 100 : null;
 
-  // ROIC, EV/EBITDA, FCF yield, net debt/EBITDA — keep from FMP key-metrics
-  const roicDecimalRaw   = latestKm.returnOnInvestedCapital ?? null;
-  const roicRaw          = roicDecimalRaw != null ? roicDecimalRaw * 100 : null;
+  // ROIC — FMP key-metrics first, then compute from FMP balance sheet statements
+  const roicDecimalRaw = latestKm.returnOnInvestedCapital ?? null;
+  const roicFromBS = roicDecimalRaw == null && opIncome != null && fmpEquity != null && fmpEquity > 0
+    ? (opIncome * 0.79) / (fmpEquity + (fmpTotalDebt ?? 0)) * 100
+    : null;
+  const roicRaw = roicDecimalRaw != null ? roicDecimalRaw * 100 : roicFromBS;
+
   const netDebtEbitdaRaw = latestKm.netDebtToEBITDA ?? null;
   const fcfYieldRaw      = latestKm.freeCashFlowYield != null
     ? latestKm.freeCashFlowYield * 100
     : (m.fcfYieldTTM ?? null);
 
-  // Net debt: totalDebt - cash (Finnhub balance sheet series, or metric fallback)
+  // Net debt: FMP balance sheet first, then Finnhub series, then metric fallback
   const totalDebtSeries = fhSeries('totalDebt').length ? fhSeries('totalDebt') : fhSeries('longTermDebt');
   const cashSeries      = fhSeries('cashAndCashEquivalents').length ? fhSeries('cashAndCashEquivalents') : fhSeries('cash');
-  const netDebtRawVal   = totalDebtSeries[0] != null && cashSeries[0] != null
-    ? totalDebtSeries[0] - cashSeries[0]
-    : (m.netDebtAnnual != null ? m.netDebtAnnual
-       : (m.totalDebt != null && m.cashAndShortTermInvestments != null
-          ? (m.totalDebt - m.cashAndShortTermInvestments) * 1e6 : null));
+  const netDebtRawVal   = fmpTotalDebt != null && fmpCash != null
+    ? fmpTotalDebt - fmpCash
+    : (totalDebtSeries[0] != null && cashSeries[0] != null
+      ? totalDebtSeries[0] - cashSeries[0]
+      : (m.netDebtAnnual != null ? m.netDebtAnnual
+         : (m.totalDebt != null && m.cashAndShortTermInvestments != null
+            ? (m.totalDebt - m.cashAndShortTermInvestments) * 1e6 : null)));
 
   const interestCovRaw = opIncome != null && interestExp && interestExp > 0
     ? opIncome / interestExp : null;
 
   const fcfConvRaw = (() => {
-    // Primary: Finnhub cashflow series
+    // Primary: FCF / net income from FMP or Finnhub
     if (fcfRawVal != null && netIncomeRaw != null && netIncomeRaw > 0)
       return fcfRawVal / netIncomeRaw;
     // Fallback 1: FMP key-metrics per-share figures (same ratio, share count cancels out)
@@ -4336,14 +4579,38 @@ function renderStockDetail(d) {
       <div>${d.risks.map(r => `<span class="risk-tag">${r}</span>`).join('')}</div>
     </div>` : '';
 
-  const newsHTML = d.recentNews?.length ? `
-    <div class="stock-detail-card full">
-      <div class="stock-card-title">Recent Developments</div>
-      ${d.recentNews.map(n => {
-        const dotColor = n.sentiment === 'positive' ? 'var(--green)' : n.sentiment === 'negative' ? 'var(--red)' : 'var(--text-3)';
-        return `<div class="news-item"><div class="news-dot" style="background:${dotColor}"></div><div><div class="news-headline">${n.headline}</div><div class="news-date">${n.date || ''}</div></div></div>`;
-      }).join('')}
-    </div>` : '';
+  const newsItems = d.recentNews || [];
+  const newsHTML = newsItems.length ? (() => {
+    const rows = newsItems.map(n => {
+      const sentColor = n.sentiment === 'positive' ? 'var(--green)' : n.sentiment === 'negative' ? 'var(--red)' : 'var(--text-3)';
+      const sentLabel = n.sentiment === 'positive' ? '▲' : n.sentiment === 'negative' ? '▼' : '●';
+      const linkAttr  = n.url ? `onclick="window.open('${n.url.replace(/'/g,"\\'")}','_blank')"` : '';
+      return `<div class="news-co-item" ${linkAttr}>
+        <div class="news-co-title">${n.headline}</div>
+        ${n.summary ? `<div class="news-co-summary">${n.summary}</div>` : ''}
+        <div class="news-co-meta">
+          <span style="color:${sentColor}">${sentLabel}</span>
+          ${n.source ? `<span>${n.source}</span>` : ''}
+          ${n.date ? `<span>${n.date}</span>` : ''}
+          ${n.url ? `<span style="color:var(--blue)">↗ Read</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="stock-detail-card full">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="stock-card-title" style="margin-bottom:0">Company News</div>
+        <button onclick="refreshCompanyNews('${d.name.replace(/'/g,"\\'")}','${(d.ticker||'').replace(/'/g,"\\'")}',this)" style="font-size:10px;color:var(--blue);background:none;border:none;cursor:pointer;padding:2px 6px">↻ Refresh</button>
+      </div>
+      <div id="company-news-body-${(d.ticker||d.name).replace(/\W/g,'_')}">${rows}</div>
+    </div>`;
+  })() : `<div class="stock-detail-card full">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="stock-card-title" style="margin-bottom:0">Company News</div>
+    </div>
+    <div id="company-news-body-${(d.ticker||d.name).replace(/\W/g,'_')}" style="color:var(--text-3);font-size:12px;padding:20px 0;text-align:center">
+      ${d.ticker ? `<button onclick="refreshCompanyNews('${d.name.replace(/'/g,"\\'")}','${(d.ticker||'').replace(/'/g,"\\'")}',this.parentNode)" style="font-size:11px;color:var(--blue);background:rgba(79,124,247,.08);border:1px solid rgba(79,124,247,.2);border-radius:6px;cursor:pointer;padding:6px 14px">Load news for ${d.ticker}</button>` : 'No news available — ticker unknown'}
+    </div>
+  </div>`;
 
   const wlIdx = watchlist.findIndex(w => w.name === d.name);
   const onWl  = wlIdx >= 0;
