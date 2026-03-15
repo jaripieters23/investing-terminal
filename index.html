@@ -673,34 +673,12 @@ html{scroll-padding-top:var(--header-h)}
     <div class="settings-section">
       <div class="settings-section-header">
         <div class="settings-section-title">☁️ Cloud Sync — Watchlist</div>
-        <div class="settings-section-sub">Sync your watchlist across devices via Supabase (free). <a href="https://supabase.com" target="_blank" style="color:var(--blue)">Create a free project</a>, then paste your project URL and anon key below. <span style="color:var(--text-2)">Setup: in Supabase SQL editor run the one-time table creation query shown below.</span></div>
+        <div class="settings-section-sub">Watchlist syncs automatically across all your devices via your Cloudflare Worker. No keys needed in the app.</div>
       </div>
       <div class="settings-row">
         <div class="settings-row-label">
-          <strong>Supabase Project URL</strong>
-          <span>e.g. https://xxxx.supabase.co</span>
-        </div>
-        <div class="settings-row-control" style="max-width:320px;width:100%">
-          <input type="text" id="supabase-url" class="settings-input" placeholder="https://xxxx.supabase.co"
-            style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:6px 10px;font-family:'Inter',sans-serif"
-            onchange="saveSupabaseConfig()">
-        </div>
-      </div>
-      <div class="settings-row">
-        <div class="settings-row-label">
-          <strong>Supabase Anon Key</strong>
-          <span>Found in Project Settings → API</span>
-        </div>
-        <div class="settings-row-control" style="max-width:320px;width:100%">
-          <input type="password" id="supabase-key" class="settings-input" placeholder="eyJ..."
-            style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:6px 10px;font-family:'Inter',sans-serif"
-            onchange="saveSupabaseConfig()">
-        </div>
-      </div>
-      <div class="settings-row">
-        <div class="settings-row-label">
-          <strong>SQL setup</strong>
-          <span style="font-family:monospace;font-size:10px;color:var(--blue);word-break:break-all">create table watchlist_sync (id text primary key, data jsonb, updated_at timestamptz default now());</span>
+          <strong>Supabase Worker</strong>
+          <span>via <code style="font-size:10px;color:var(--blue)">supabase-proxy.jaripieters.workers.dev</code></span>
         </div>
         <div class="settings-row-control">
           <button class="settings-save-btn secondary" id="supabase-test-btn" onclick="testSupabaseConnection()">Test</button>
@@ -710,7 +688,7 @@ html{scroll-padding-top:var(--header-h)}
       <div class="settings-row">
         <div class="settings-row-label">
           <strong>Sync status</strong>
-          <span id="supabase-sync-status">Not configured</span>
+          <span id="supabase-sync-status">Checking…</span>
         </div>
         <div class="settings-row-control">
           <button class="settings-save-btn secondary" onclick="supabasePush()">Push</button>
@@ -764,10 +742,11 @@ html{scroll-padding-top:var(--header-h)}
 // CLOUDFLARE WORKER PROXIES
 // ═══════════════════════════════════════════════════════════════
 const WORKERS = {
-  groq:    'https://groq-proxy.jaripieters.workers.dev',
-  fmp:     'https://fmp-proxy.jaripieters.workers.dev',
-  finnhub: 'https://finhubb-proxy.jaripieters.workers.dev',
-  yahoo:   'https://yahoo-proxy.jaripieters.workers.dev',
+  groq:     'https://groq-proxy.jaripieters.workers.dev',
+  fmp:      'https://fmp-proxy.jaripieters.workers.dev',
+  finnhub:  'https://finhubb-proxy.jaripieters.workers.dev',
+  yahoo:    'https://yahoo-proxy.jaripieters.workers.dev',
+  supabase: 'https://supabase-proxy.jaripieters.workers.dev',
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -5093,63 +5072,33 @@ function showRestoredBanner() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SUPABASE CLOUD SYNC
+// SUPABASE CLOUD SYNC — via Cloudflare Worker
 // ═══════════════════════════════════════════════════════════════
 
-// Device ID — stable per browser, used as the row key
+// Stable device ID — used as the row key in the database
 const _deviceId = (() => {
   let id = localStorage.getItem('pa_deviceId');
   if (!id) { id = 'dev_' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('pa_deviceId', id); }
   return id;
 })();
 
-function _sbConfig() {
-  const url = localStorage.getItem('pa_supabaseUrl') || '';
-  const key = localStorage.getItem('pa_supabaseKey') || '';
-  return { url: url.trim().replace(/\/$/, ''), key: key.trim() };
-}
-
-function saveSupabaseConfig() {
-  const url = document.getElementById('supabase-url')?.value || '';
-  const key = document.getElementById('supabase-key')?.value || '';
-  localStorage.setItem('pa_supabaseUrl', url.trim());
-  localStorage.setItem('pa_supabaseKey', key.trim());
-  _updateSyncStatus('Config saved');
-}
-
 function _updateSyncStatus(msg) {
   const el = document.getElementById('supabase-sync-status');
   if (el) el.textContent = msg;
 }
 
-async function _sbRequest(method, body) {
-  const { url, key } = _sbConfig();
-  if (!url || !key) throw new Error('Supabase not configured');
-  const res = await fetch(url + '/rest/v1/watchlist_sync', {
-    method,
-    headers: {
-      'apikey': key,
-      'Authorization': 'Bearer ' + key,
-      'Content-Type': 'application/json',
-      'Prefer': method === 'POST' ? 'resolution=merge-duplicates,return=minimal' : 'return=minimal',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error('Supabase ' + res.status + ': ' + err.slice(0, 120));
-  }
-  // 204 and 201 with return=minimal both have empty bodies — don't parse
-  const text = await res.text();
-  if (!text || !text.trim()) return null;
-  try { return JSON.parse(text); } catch { return null; }
-}
-
 async function supabasePush() {
   try {
     _updateSyncStatus('Pushing…');
-    const payload = { id: _deviceId, data: { watchlist }, updated_at: new Date().toISOString() };
-    await _sbRequest('POST', payload);
+    const res = await fetch(WORKERS.supabase + '?action=push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: _deviceId, data: { watchlist }, updated_at: new Date().toISOString() }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error('HTTP ' + res.status + ': ' + err.slice(0, 100));
+    }
     _updateSyncStatus('✓ Pushed ' + watchlist.length + ' items · ' + new Date().toLocaleTimeString());
   } catch(e) {
     _updateSyncStatus('✗ Push failed: ' + e.message);
@@ -5160,19 +5109,19 @@ async function supabasePush() {
 async function supabasePull() {
   try {
     _updateSyncStatus('Pulling…');
-    const { url, key } = _sbConfig();
-    if (!url || !key) throw new Error('Not configured');
-    // Fetch all rows, use the most recently updated one
-    const res = await fetch(url + '/rest/v1/watchlist_sync?select=id,data,updated_at&order=updated_at.desc&limit=10', {
-      headers: { 'apikey': key, 'Authorization': 'Bearer ' + key }
-    });
+    const res = await fetch(WORKERS.supabase + '?action=pull');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const rows = await res.json();
-    if (!rows.length) { _updateSyncStatus('No data found in Supabase'); return; }
-    // Merge all rows — union by stock name, newest entry wins
+    if (!Array.isArray(rows) || !rows.length) {
+      _updateSyncStatus('No data in cloud yet — push first');
+      return;
+    }
+    // Merge all device rows — union by stock name, most recent entry wins
     const merged = {};
-    [...rows].reverse().forEach(row => {
-      (row.data?.watchlist || []).forEach(item => { merged[item.name] = item; });
+    [...rows].reverse().forEach(function(row) {
+      (row.data && row.data.watchlist || []).forEach(function(item) {
+        if (item && item.name) merged[item.name] = item;
+      });
     });
     watchlist = Object.values(merged);
     saveWatchlist();
@@ -5186,58 +5135,33 @@ async function supabasePull() {
 
 async function testSupabaseConnection() {
   const btn = document.getElementById('supabase-test-btn');
-  const res = document.getElementById('supabase-test-result');
+  const resultEl = document.getElementById('supabase-test-result');
   if (btn) btn.textContent = 'Testing…';
-  if (res) res.textContent = '';
+  if (resultEl) { resultEl.textContent = ''; resultEl.style.color = ''; }
   try {
-    saveSupabaseConfig();
-    const { url, key } = _sbConfig();
-    if (!url || !key) throw new Error('Enter URL and key first');
-    const r = await fetch(url + '/rest/v1/watchlist_sync?limit=1', {
-      headers: { 'apikey': key, 'Authorization': 'Bearer ' + key }
-    });
-    if (!res) return;
-    if (r.ok) {
-      res.textContent = '✓ Connected';
-      res.style.color = 'var(--green)';
-      _updateSyncStatus('Connected — ready to sync');
-    } else {
-      const txt = await r.text();
-      if (txt.includes('relation') && txt.includes('does not exist')) {
-        res.textContent = '⚠ Table missing — run the SQL setup query above';
-        res.style.color = 'var(--amber)';
-      } else {
-        throw new Error('HTTP ' + r.status + ': ' + txt.slice(0, 80));
-      }
-    }
+    const res = await fetch(WORKERS.supabase + '?action=pull');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    if (resultEl) { resultEl.textContent = '✓ Connected'; resultEl.style.color = 'var(--green)'; }
+    _updateSyncStatus('Connected · ' + (Array.isArray(rows) ? rows.length : 0) + ' device row(s) in database');
   } catch(e) {
-    if (res) { res.textContent = '✗ ' + e.message; res.style.color = 'var(--red)'; }
+    if (resultEl) { resultEl.textContent = '✗ ' + e.message; resultEl.style.color = 'var(--red)'; }
+    _updateSyncStatus('Connection failed');
     console.error('[Supabase test]', e);
   } finally {
     if (btn) btn.textContent = 'Test';
   }
 }
 
-// Auto-sync: push to Supabase whenever watchlist is saved (debounced)
+// Auto-push to Supabase whenever watchlist is saved (debounced 2s)
 let _sbPushTimer = null;
 const _origSaveWLForSupabase = saveWatchlist;
 saveWatchlist = function() {
   _origSaveWLForSupabase();
-  const { url, key } = _sbConfig();
-  if (url && key) {
-    clearTimeout(_sbPushTimer);
-    _sbPushTimer = setTimeout(supabasePush, 2000); // debounce 2s
-  }
+  clearTimeout(_sbPushTimer);
+  _sbPushTimer = setTimeout(supabasePush, 2000);
 };
 
-function _initSupabaseUI() {
-  const { url, key } = _sbConfig();
-  const urlEl = document.getElementById('supabase-url');
-  const keyEl = document.getElementById('supabase-key');
-  if (urlEl && url) urlEl.value = url;
-  if (keyEl && key) keyEl.value = key;
-  if (url && key) _updateSyncStatus('Configured — use Push/Pull to sync');
-}
 
 // ═══════════════════════════════════════════════════════════════
 // INIT
@@ -5262,14 +5186,10 @@ try {
   } else {
     showPage('dashboard');
   }
-  // Init Supabase UI and auto-pull in background
-  setTimeout(() => {
-    _initSupabaseUI();
-    const { url, key } = _sbConfig();
-    if (url && key) {
-      supabasePull().catch(() => {});
-    }
-  }, 500);
+  // Auto-pull from Supabase in background on load
+  setTimeout(function() {
+    supabasePull().catch(function() {});
+  }, 1000);
 } catch(e) {
   console.error('[INIT CRASH]', e);
   const el = document.getElementById('init-error-banner');
