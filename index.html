@@ -592,7 +592,16 @@ html{scroll-padding-top:var(--header-h)}
 
 <div id="watchlist-page">
   <div class="watchlist-header">
-    <div class="watchlist-title">Watchlist</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="watchlist-title">Watchlist</div>
+      <div id="wl-sync-badge" title=""
+        style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;
+               padding:2px 8px;border-radius:10px;cursor:default;transition:all .3s;
+               background:rgba(90,96,122,.12);color:var(--text-3);border:1px solid var(--border)">
+        <span id="wl-sync-dot" style="width:6px;height:6px;border-radius:50%;background:var(--text-3);flex-shrink:0"></span>
+        <span id="wl-sync-label">Not synced</span>
+      </div>
+    </div>
     <div style="display:flex;align-items:center;gap:10px;flex:1;max-width:320px;margin:0 12px">
       <div style="position:relative;flex:1">
         <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-3);font-size:13px;pointer-events:none">&#128269;</span>
@@ -5367,9 +5376,30 @@ function _updateSyncStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+function _updateWlSyncBadge(state) {
+  // state: 'syncing' | 'synced' | 'error' | 'stale'
+  const badge = document.getElementById('wl-sync-badge');
+  const dot   = document.getElementById('wl-sync-dot');
+  const label = document.getElementById('wl-sync-label');
+  if (!badge || !dot || !label) return;
+  const cfg = {
+    syncing: { bg:'rgba(245,158,11,.12)', border:'rgba(245,158,11,.3)', dot:'var(--amber)', text:'var(--amber)', lbl:'Syncing…', tip:'Syncing to cloud…' },
+    synced:  { bg:'rgba(34,197,94,.10)',  border:'rgba(34,197,94,.25)', dot:'var(--green)', text:'var(--green)', lbl:'Synced',   tip:'Watchlist is up to date in the cloud' },
+    error:   { bg:'rgba(239,68,68,.10)',  border:'rgba(239,68,68,.25)', dot:'var(--red)',   text:'var(--red)',   lbl:'Sync failed', tip:'Last sync failed — check Settings' },
+    stale:   { bg:'rgba(90,96,122,.12)',  border:'var(--border)',       dot:'var(--text-3)',text:'var(--text-3)',lbl:'Not synced', tip:'Not yet synced to cloud' },
+  }[state] || {};
+  badge.style.background   = cfg.bg;
+  badge.style.borderColor  = cfg.border;
+  badge.style.color        = cfg.text;
+  badge.title              = cfg.tip;
+  dot.style.background     = cfg.dot;
+  label.textContent        = cfg.lbl;
+}
+
 async function supabasePush() {
   try {
     _updateSyncStatus('Pushing…');
+    _updateWlSyncBadge('syncing');
     const res = await fetch(WORKERS.supabase + '?action=push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -5380,8 +5410,10 @@ async function supabasePush() {
       throw new Error('HTTP ' + res.status + ': ' + err.slice(0, 100));
     }
     _updateSyncStatus('✓ Pushed ' + watchlist.length + ' items · ' + new Date().toLocaleTimeString());
+    _updateWlSyncBadge('synced');
   } catch(e) {
     _updateSyncStatus('✗ Push failed: ' + e.message);
+    _updateWlSyncBadge('error');
     console.error('[Supabase push]', e);
   }
 }
@@ -5389,14 +5421,15 @@ async function supabasePush() {
 async function supabasePull() {
   try {
     _updateSyncStatus('Pulling…');
+    _updateWlSyncBadge('syncing');
     const res = await fetch(WORKERS.supabase + '?action=pull');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const rows = await res.json();
     if (!Array.isArray(rows) || !rows.length) {
       _updateSyncStatus('No data in cloud yet — push first');
+      _updateWlSyncBadge('stale');
       return;
     }
-    // Merge all device rows — union by stock name, most recent entry wins
     const merged = {};
     [...rows].reverse().forEach(function(row) {
       (row.data && row.data.watchlist || []).forEach(function(item) {
@@ -5407,8 +5440,10 @@ async function supabasePull() {
     saveWatchlist();
     renderWatchlistTable();
     _updateSyncStatus('✓ Pulled ' + watchlist.length + ' items · ' + new Date().toLocaleTimeString());
+    _updateWlSyncBadge('synced');
   } catch(e) {
     _updateSyncStatus('✗ Pull failed: ' + e.message);
+    _updateWlSyncBadge('error');
     console.error('[Supabase pull]', e);
   }
 }
