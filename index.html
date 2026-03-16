@@ -2972,7 +2972,12 @@ function renderWatchlistTable() {
   const sorted = [...watchlist].sort((a,b) => {
     const av = wlSortKey === 'name' ? a.name : wlSortKey === 'score' ? a.totalScore : wlSortKey === 'price' ? (a.currentPrice||0) : (a.currentPrice && (a.manualTargetLow||a.targetLow) ? ((a.manualTargetLow||a.targetLow)-a.currentPrice)/a.currentPrice*100 : -999);
     const bv = wlSortKey === 'name' ? b.name : wlSortKey === 'score' ? b.totalScore : wlSortKey === 'price' ? (b.currentPrice||0) : (b.currentPrice && (b.manualTargetLow||b.targetLow) ? ((b.manualTargetLow||b.targetLow)-b.currentPrice)/b.currentPrice*100 : -999);
-    return typeof av === 'string' ? av.localeCompare(bv) * wlSortDir : (bv - av) * wlSortDir;
+    const primary = typeof av === 'string' ? av.localeCompare(bv) * wlSortDir : (bv - av) * wlSortDir;
+    if (primary !== 0) return primary;
+    // Secondary sort: upside descending
+    const aUp = a.currentPrice && (a.manualTargetLow||a.targetLow) ? ((a.manualTargetLow||a.targetLow)-a.currentPrice)/a.currentPrice : -999;
+    const bUp = b.currentPrice && (b.manualTargetLow||b.targetLow) ? ((b.manualTargetLow||b.targetLow)-b.currentPrice)/b.currentPrice : -999;
+    return bUp - aUp;
   });
   const filtered = _wlSearchQuery
     ? sorted.filter(s => s.name.toLowerCase().includes(_wlSearchQuery) || (s.ticker||'').toLowerCase().includes(_wlSearchQuery))
