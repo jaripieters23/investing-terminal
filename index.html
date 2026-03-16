@@ -591,7 +591,19 @@ html{scroll-padding-top:var(--header-h)}
 </div>
 
 <div id="watchlist-page">
-  <div class="watchlist-header"><div class="watchlist-title">Watchlist</div><button class="scan-btn secondary" onclick="refreshWatchlist()" style="font-size:11px;padding:6px 12px">&#x21bb; Refresh prices</button></div>
+  <div class="watchlist-header">
+    <div class="watchlist-title">Watchlist</div>
+    <div style="display:flex;align-items:center;gap:10px;flex:1;max-width:320px;margin:0 12px">
+      <div style="position:relative;flex:1">
+        <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-3);font-size:13px;pointer-events:none">&#128269;</span>
+        <input id="watchlist-search" type="text" placeholder="Search companies…"
+          oninput="filterWatchlist(this.value)"
+          style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;padding:6px 10px 6px 28px;font-family:'Inter',sans-serif;outline:none;box-sizing:border-box;transition:border-color .15s"
+          onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+      </div>
+    </div>
+    <button class="scan-btn secondary" onclick="refreshWatchlist()" style="font-size:11px;padding:6px 12px">&#x21bb; Refresh prices</button>
+  </div>
   <div class="wl-table-wrap"><table>
     <thead><tr><th onclick="sortWatchlist('name')">Company &#x21C5;</th><th class="right" onclick="sortWatchlist('score')">Score &#x21C5;</th><th class="right">Verdict</th><th class="right" onclick="sortWatchlist('price')">Price &#x21C5;</th><th class="right">Low target</th><th class="right" onclick="sortWatchlist('upside')">Upside &#x21C5;</th><th class="right"></th></tr></thead>
     <tbody id="watchlist-body"></tbody>
@@ -2931,6 +2943,13 @@ function removeFromWatchlist(name) {
   renderWatchlistTable();
 }
 
+let _wlSearchQuery = '';
+
+function filterWatchlist(q) {
+  _wlSearchQuery = q.trim().toLowerCase();
+  renderWatchlistTable();
+}
+
 function sortWatchlist(key) {
   if (wlSortKey === key) wlSortDir *= -1; else { wlSortKey = key; wlSortDir = -1; }
   renderWatchlistTable();
@@ -2940,15 +2959,24 @@ function renderWatchlistTable() {
   const tbody = document.getElementById('watchlist-body');
   const empty = document.getElementById('watchlist-empty');
   if (!watchlist.length) { tbody.innerHTML = ''; empty.style.display = 'block'; updateWatchlistBadge(); return; }
-  empty.style.display = 'none';
   updateWatchlistBadge();
   const sorted = [...watchlist].sort((a,b) => {
     const av = wlSortKey === 'name' ? a.name : wlSortKey === 'score' ? a.totalScore : wlSortKey === 'price' ? (a.currentPrice||0) : (a.currentPrice && (a.manualTargetLow||a.targetLow) ? ((a.manualTargetLow||a.targetLow)-a.currentPrice)/a.currentPrice*100 : -999);
     const bv = wlSortKey === 'name' ? b.name : wlSortKey === 'score' ? b.totalScore : wlSortKey === 'price' ? (b.currentPrice||0) : (b.currentPrice && (b.manualTargetLow||b.targetLow) ? ((b.manualTargetLow||b.targetLow)-b.currentPrice)/b.currentPrice*100 : -999);
     return typeof av === 'string' ? av.localeCompare(bv) * wlSortDir : (bv - av) * wlSortDir;
   });
+  const filtered = _wlSearchQuery
+    ? sorted.filter(s => s.name.toLowerCase().includes(_wlSearchQuery) || (s.ticker||'').toLowerCase().includes(_wlSearchQuery))
+    : sorted;
+  if (!filtered.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    empty.textContent = _wlSearchQuery ? 'No results for "' + _wlSearchQuery + '"' : 'No stocks on your watchlist yet.';
+    return;
+  }
+  empty.style.display = 'none';
   const sym = s => s === 'USD' ? '$' : s === 'GBP' ? '£' : '€';
-  tbody.innerHTML = sorted.map(s => {
+  tbody.innerHTML = filtered.map(s => {
     const verdictCls = s.verdict === 'BUY' ? 'wl-buy' : s.verdict === 'WATCH' ? 'wl-watch' : 'wl-pass';
 
     // Prefer manual targets over analyst targets
