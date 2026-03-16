@@ -315,17 +315,6 @@ td{padding:8px 16px;vertical-align:middle}
 .news-item{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
 .news-item:last-child{border-bottom:none;padding-bottom:0}
 .news-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0}
-.manual-entry-btn{font-size:10px;color:var(--blue);background:none;border:none;cursor:pointer;padding:1px 4px;border-radius:3px;opacity:.7;transition:opacity .15s}
-.manual-entry-btn:hover{opacity:1;background:rgba(79,124,247,.1)}
-.manual-entry-wrap{display:flex;align-items:center;gap:6px;margin-top:5px;padding:7px 10px;background:rgba(79,124,247,.06);border:1px solid rgba(79,124,247,.2);border-radius:7px;flex-wrap:wrap}
-.manual-entry-input{background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;padding:3px 7px;width:80px;font-family:'Inter',sans-serif}
-.manual-entry-input:focus{outline:none;border-color:var(--blue)}
-.manual-entry-label{font-size:10px;color:var(--text-3)}
-.manual-entry-save{font-size:10px;padding:3px 10px;background:var(--blue);color:#fff;border:none;border-radius:5px;cursor:pointer}
-.manual-entry-save:hover{opacity:.85}
-.manual-entry-clear{font-size:10px;padding:3px 8px;background:transparent;color:var(--text-3);border:1px solid var(--border);border-radius:5px;cursor:pointer}
-.manual-entry-clear:hover{color:var(--red);border-color:var(--red)}
-.manual-badge{font-size:9px;color:var(--blue);background:rgba(79,124,247,.12);border:1px solid rgba(79,124,247,.2);border-radius:3px;padding:1px 4px;margin-left:4px}
 .holdings-sub-group{border-top:1px solid var(--border)}
 .holdings-sub-group:first-child{border-top:none}
 .holdings-sub-header{display:flex;align-items:center;justify-content:space-between;padding:7px 14px;cursor:pointer;background:rgba(255,255,255,.02);user-select:none;font-size:12px;color:var(--text-2);font-weight:500}
@@ -803,10 +792,8 @@ let perfChartInst = null;
 let watchlist = (() => { try { return JSON.parse(localStorage.getItem('watchlist') || '[]'); } catch { return []; } })();
 
 // Manual quant overrides: { "Company Name": { revGrowth: {hist:12,fwd:8}, epsGrowth: {hist:15,fwd:10}, fcfConv: 92, netMargin: 18, roic: 22, netDebtEbitda: 1.5 } }
-let _manualOverrides = (() => { try { return JSON.parse(localStorage.getItem('pa_manualOverrides') || localStorage.getItem('manualOverrides') || '{}'); } catch { return {}; } })();
-function saveManualOverrides() { try { localStorage.setItem('pa_manualOverrides', JSON.stringify(_manualOverrides)); localStorage.removeItem('manualOverrides'); } catch {} }
 let wlSortKey = 'score';
-let wlSortDir = -1;
+let wlSortDir = 1;
 let scanQueue = [];
 let scanResults = [];
 let _prevPage = 'dashboard';
@@ -2327,134 +2314,7 @@ async function scoreStock(name) {
   // ── Step 2: Compute quantitative criteria (rule-based) ────────────────────
   const fin  = realData?.financials || {};
   // Handle both raw numbers and "18.2%" formatted strings
-  const pct = v => {
-    if (v == null) return null;
-    if (typeof v === 'number') return isNaN(v) ? null : v;
-    const s = String(v).replace(/%/g, '').trim();
-    const n = parseFloat(s);
-    return isNaN(n) ? null : n;
-  };
-
-  // Parse raw values
-  const roic          = pct(fin.roic);
-  const netDebtEbitda = pct(fin.netDebtEbitda);
-  const netDebt       = pct(fin.netDebtRaw);
-  const netMargin     = pct(fin.netIncomeMargin);  // %
-  const revCagr       = pct(fin.revenueCagr5y);
-  const epsCagr       = pct(fin.epsCagr5y);
-  const fwdRevGrowth  = pct(fin.fwdRevGrowth);
-  const fwdEpsGrowth  = pct(fin.fwdEpsGrowth);
-  // FCF conversion: use stored ratio, or derive from raw FCF + net income if available
-  const fcfConv = (() => {
-    const stored = pct(fin.fcfConversion);
-    if (stored != null) return stored;
-    // Derive from raw values: fcfRaw / (netIncomeMargin% * revenue)
-    const fcfR = pct(fin.fcfRaw);
-    const rev  = pct(fin.revenueCagr5y); // not useful here
-    // Try fcfRaw vs netIncome directly
-    if (fin.fcfRaw != null && fin.netIncomeMargin != null && fin.revenue != null) {
-      const ni = (fin.netIncomeMargin / 100) * fin.revenue;
-      if (ni > 0) return fin.fcfRaw / ni;
-    }
-    return null;
-  })();
-
-  // Revenue: hist > 9% AND fwd > 7% (use available side if only one exists)
-  const revHistPass = revCagr      != null ? revCagr      > 9 : null;
-  const revFwdPass  = fwdRevGrowth != null ? fwdRevGrowth > 7 : null;
-  const revPass = revHistPass !== null && revFwdPass !== null ? (revHistPass && revFwdPass)
-    : revHistPass !== null ? revHistPass : revFwdPass;
-
-  // EPS: hist > 12% AND fwd > 9%
-  const epsHistPass = epsCagr      != null ? epsCagr      > 12 : null;
-  const epsFwdPass  = fwdEpsGrowth != null ? fwdEpsGrowth > 9  : null;
-  const epsPass = epsHistPass !== null && epsFwdPass !== null ? (epsHistPass && epsFwdPass)
-    : epsHistPass !== null ? epsHistPass : epsFwdPass;
-
-  // Formatters
-  const fmtPct  = v => v != null ? v.toFixed(1) + '%' : null;
-  const fmtX    = v => v != null ? v.toFixed(1) + 'x' : null;
-  const fmtDual = (hist, fwd, ht, ft, histLabel = 'Hist', fwdLabel = 'Fwd') => {
-    const parts = [];
-    if (hist != null) parts.push(histLabel + ': ' + hist.toFixed(1) + '% (>' + ht + '%)');
-    if (fwd  != null) parts.push(fwdLabel  + ': ' + fwd.toFixed(1)  + '% (>' + ft + '%)');
-    return parts.length ? parts.join(' · ') : null;
-  };
-
-  // 6 quantitative criteria — each has an optional `nullReason` explaining missing data
-  const quant = [
-    { key:'revGrowth',
-      label:'Revenue Growth > 9% (5Y CAGR), > 7% (fwd)',
-      icon:'🚀',
-      value: fmtDual(revCagr, fwdRevGrowth, 9, 7, '5Y', 'Fwd'),
-      pass: revPass,
-      nullReason: revPass === null
-        ? (!revCagr && !fwdRevGrowth
-          ? 'No revenue history or forward estimates found in Finnhub financials for this ticker'
-          : !revCagr
-          ? 'Historical revenue series too short to compute 5Y CAGR (need ≥2 years of data)'
-          : 'Forward revenue estimates unavailable — no FMP analyst coverage for this ticker')
-        : null },
-
-    { key:'epsGrowth',
-      label:'EPS Growth > 12% (hist 5Y), fwd 2Y CAGR > 9%',
-      icon:'💹',
-      value: fmtDual(epsCagr, fwdEpsGrowth, 12, 9, '5Y', '2Y Fwd'),
-      pass: epsPass,
-      nullReason: epsPass === null
-        ? (!epsCagr && !fwdEpsGrowth
-          ? 'No EPS data found — Finnhub may not have income statement data for this ticker'
-          : !epsCagr
-          ? 'EPS history too short or negative — cannot compute 5Y CAGR (need ≥2 years of positive EPS)'
-          : 'Forward EPS estimates unavailable — no FMP analyst coverage for this ticker')
-        : null },
-
-    { key:'fcfConv',
-      label:'FCF / Net Income > 80%',
-      icon:'🔄',
-      value: fcfConv != null ? fmtPct(fcfConv * 100) : null,
-      pass: fcfConv != null ? fcfConv > 0.80 : null,
-      nullReason: fcfConv == null
-        ? 'FCF conversion not available — tried Finnhub cash flow series and FMP key-metrics (freeCashFlowPerShare / netIncomePerShare), neither returned usable data for this ticker'
-        : null },
-
-    { key:'netMargin',
-      label:'Profit Margin > 10%',
-      icon:'📈',
-      value: fmtPct(netMargin),
-      pass: netMargin != null ? netMargin > 10 : null,
-      nullReason: netMargin == null
-        ? 'Profit margin not available — tried Finnhub income series, FMP key-metrics (netIncomePerShare / revenuePerShare), and Finnhub netProfitMarginTTM metric; none returned data for this ticker'
-        : null },
-
-    { key:'roic',
-      label:'ROIC > 15%',
-      icon:'💰',
-      value: fmtPct(roic),
-      pass: roic != null ? roic > 15 : null,
-      nullReason: roic == null
-        ? 'ROIC (Return on Invested Capital) comes from FMP key-metrics — not returned for this ticker, likely outside FMP coverage'
-        : null },
-
-    { key:'netDebtEbitda',
-      label:'Net Debt / EBITDA < 3x',
-      icon:'🏦',
-      value: netDebt != null && netDebt < 0 ? 'Net cash' : fmtX(netDebtEbitda),
-      pass: netDebt != null && netDebt < 0 ? true : (netDebtEbitda != null ? netDebtEbitda < 3 : null),
-      nullReason: (netDebt == null || netDebt >= 0) && netDebtEbitda == null
-        ? 'Net Debt / EBITDA comes from FMP key-metrics — not returned for this ticker, or EBITDA is zero/negative'
-        : null },
-  ];
-
-  // Score: passed / 6 criteria
-  const quantWithData = quant.filter(q => q.pass !== null);
-  const quantPoints   = quantWithData.filter(q => q.pass).length;
-  const quantMissing  = quant.length - quantWithData.length;   // how many were skipped
-  const quantScore    = quantWithData.length > 0
-    ? Math.round((quantPoints / quantWithData.length) * 100)
-    : null;
-
-  // ── Step 3: Qualitative scoring via Groq ──────────────────────────────────
+  // ── Step 3: Qualitative scoring via Groq  ──────────────────────────────────
   // Cache result for 1 hour — re-scanning same stock won't burn Groq tokens
   const _groqCacheKey = 'groq:qual:' + name.toLowerCase();
   let result = _cacheGet(_fmpCache, _groqCacheKey);
@@ -2472,9 +2332,7 @@ Respond ONLY with this exact JSON structure:
   const qualScore  = Math.round((qualAvg / 5) * 100);
 
   // ── Step 4: Final composite score ────────────────────────────────────────
-  const finalScore = quantScore != null
-    ? Math.round(quantScore * 0.6 + qualScore * 0.4)
-    : qualScore;
+  const finalScore = qualScore;
 
   // Normalise to /10 for backward compat with verdict + watchlist
   const totalScore = +(finalScore / 10).toFixed(1);
@@ -2495,9 +2353,6 @@ Respond ONLY with this exact JSON structure:
       // store reasons too
       _reasons: Object.fromEntries(Object.entries(qual).map(([k,v]) => [k, v?.reason || ''])),
     },
-    quantCriteria: quant,   // full criteria array for rendering ✓/✗
-    quantScore,             // 0-100 (based only on available criteria)
-    quantMissing,           // number of criteria skipped due to missing data
     qualScore,              // 0-100
     finalScore,             // 0-100
     totalScore,             // 0-10 for backward compat
@@ -2582,14 +2437,6 @@ function renderScanResults() {
     const alreadyOnWl = watchlist.some(w => w.name === s.name);
     const portfolioBadge = s.inPortfolio && _settings.portfolioBadge !== false ? '<span class="in-portfolio-tag">In portfolio</span>' : '';
 
-    // Quantitative criteria rows (✓/✗)
-    const quantRows = (s.quantCriteria || []).map(q => {
-      const icon = q.pass === true ? '✓' : q.pass === false ? '✗' : '—';
-      const col  = q.pass === true ? 'var(--green)' : q.pass === false ? 'var(--red)' : 'var(--text-3)';
-      const val  = q.value ? `<span style="font-size:10px;color:var(--text-3);margin-right:4px">${q.value}</span>` : '';
-      return `<div class="criteria-row"><span class="crit-icon">${q.icon}</span><span class="crit-label">${q.label}</span><span style="margin-left:auto;display:flex;align-items:center;gap:2px">${val}<span style="font-size:13px;font-weight:700;color:${col};min-width:14px;text-align:right">${icon}</span></span></div>`;
-    }).join('');
-
     // Qualitative criteria bars (1-5 → bar)
     const qualRows = QUAL_CRITERIA.map(c => {
       const v = +(s.scores?.[c.key] || 0);
@@ -2597,18 +2444,8 @@ function renderScanResults() {
       return `<div class="criteria-row"><span class="crit-icon">${c.icon}</span><span class="crit-label">${c.label}</span><div class="crit-bar-wrap"><div class="crit-bar" style="width:${v*20}%;background:${barColor}"></div></div><span class="crit-score-num">${v}/5</span></div>`;
     }).join('');
 
-    // Score breakdown pills
-    const qnMissing = s.quantMissing || 0;
-    const qnPill = s.quantScore != null
-      ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(79,124,247,.12);color:var(--blue);border:1px solid rgba(79,124,247,.2)">Quant ${s.quantScore}%${qnMissing > 0 ? ' <span style="color:var(--amber)">⚠</span>' : ''}</span>`
-      : '';
-    const qlPill = s.qualScore  != null ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.2)">Qual ${s.qualScore}%</span>` : '';
-    const qnWarn = qnMissing > 0
-      ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px">
-          <span style="font-size:10px;color:var(--amber)">⚠ Quant score based on ${6 - qnMissing}/6 criteria — ${qnMissing} data point${qnMissing > 1 ? 's' : ''} unavailable</span>
-          <button class="manual-entry-btn" style="font-size:10px;padding:2px 8px" onclick="openMissingModal(this)" data-name="${s.name.replace(/"/g,'&quot;')}">✏ Add missing values</button>
-        </div>`
-      : '';
+    // Score pill
+    const qlPill = s.qualScore != null ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.2)">Quality ${s.qualScore}%</span>` : '';
 
     return `<div class="scan-card">
       <div class="scan-card-header">
@@ -2627,12 +2464,10 @@ function renderScanResults() {
           </div>
         </div>
       </div>
-      ${s.quantCriteria?.length ? `<div style="font-size:10px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 5px">Quantitative</div><div class="criteria-rows">${quantRows}</div>` : ''}
       <div style="font-size:10px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 5px">Qualitative</div>
       <div class="criteria-rows">${qualRows}</div>
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:10px">
-        <div style="display:flex;gap:5px;flex-wrap:wrap">${qnPill}${qlPill}</div>
-        ${qnWarn}
+        <div style="display:flex;gap:5px;flex-wrap:wrap">${qlPill}</div>
         <div class="scan-verdict">Verdict: <span class="${verdictCls}">${s.verdict}</span> &mdash; ${s.reason || ''}</div>
         ${(() => { const at = s.realData?.analystTargets || s.analystTargets; if (!at || (!at.low && !at.mean)) return '<div style="font-size:11px;color:var(--text-3);margin-top:2px">Analyst targets: No data</div>'; const sym2 = at.currency==='USD'?'$':'€'; return '<div style="font-size:11px;color:var(--text-3);margin-top:2px">Analyst targets — Low: <span style="color:var(--green);font-weight:600">'+( at.low?sym2+at.low.toFixed(2):'—')+'</span> · Mean: <span style="font-weight:600">'+( at.mean?sym2+at.mean.toFixed(2):'—')+'</span> · High: <span style="font-weight:600">'+( at.high?sym2+at.high.toFixed(2):'—')+'</span></div>'; })()}
         <button class="wl-add-btn ${alreadyOnWl ? 'added' : ''}" id="${wlId}" onclick="toggleWatchlistFromScan('${s.name.replace(/'/g,"\\'")}',this)">${alreadyOnWl ? '★ Watchlist' : '☆ Add to watchlist'}</button>
@@ -2923,8 +2758,6 @@ function addToWatchlist(stock) {
     targetMean:     at?.mean       || stock.targetMean   || null,
     targetHigh:     at?.high       || stock.targetHigh   || null,
     analystTargets: at             || stock.analystTargets || null,
-    quantCriteria:  stock.quantCriteria || null,
-    quantScore:     stock.quantScore    || null,
     qualScore:      stock.qualScore     || null,
     realData:       Object.keys(rd).length ? rd : null,
   });
@@ -4256,401 +4089,6 @@ Respond ONLY with valid JSON (no markdown):
   return aiResult;
 }
 
-// ── Manual quant overrides ────────────────────────────────────────────────────
-// Each criterion can have `components` — individual raw values the user enters,
-// from which the criterion value is computed. If no components, user enters the
-// final value directly (old behaviour).
-const QUANT_CRITERIA_CONFIG = {
-  revGrowth: {
-    type:'dual', labels:['5Y CAGR (%)', 'Fwd (%)'], keys:['hist','fwd'], thresholds:[9,7], unit:'%',
-    // No components — user enters the % directly (already simple enough)
-  },
-  epsGrowth: {
-    type:'dual', labels:['5Y CAGR (%)', 'Fwd 2Y (%)'], keys:['hist','fwd'], thresholds:[12,9], unit:'%',
-  },
-  fcfConv: {
-    type:'single', label:'FCF / Net Income', threshold:80, unit:'%',
-    components: [
-      { key:'fcf',       label:'Free Cash Flow',  placeholder:'e.g. 5200000000', hint:'absolute value in local currency' },
-      { key:'netIncome', label:'Net Income',       placeholder:'e.g. 6500000000', hint:'absolute value in local currency' },
-    ],
-    compute: c => c.fcf != null && c.netIncome != null && c.netIncome !== 0
-      ? (c.fcf / c.netIncome) * 100 : null,
-    format: v => v.toFixed(1) + '%',
-  },
-  netMargin: {
-    type:'single', label:'Net Profit Margin', threshold:10, unit:'%',
-    components: [
-      { key:'netIncome', label:'Net Income',  placeholder:'e.g. 6500000000', hint:'absolute value' },
-      { key:'revenue',   label:'Revenue',     placeholder:'e.g. 60000000000', hint:'absolute value' },
-    ],
-    compute: c => c.netIncome != null && c.revenue != null && c.revenue !== 0
-      ? (c.netIncome / c.revenue) * 100 : null,
-    format: v => v.toFixed(1) + '%',
-  },
-  roic: {
-    type:'single', label:'ROIC', threshold:15, unit:'%',
-    components: [
-      { key:'nopat',        label:'NOPAT (or EBIT×0.79)', placeholder:'e.g. 4000000000', hint:'Net operating profit after tax' },
-      { key:'investedCap',  label:'Invested Capital',     placeholder:'e.g. 25000000000', hint:'Equity + net debt' },
-    ],
-    compute: c => c.nopat != null && c.investedCap != null && c.investedCap !== 0
-      ? (c.nopat / c.investedCap) * 100 : null,
-    format: v => v.toFixed(1) + '%',
-    // Also allow direct entry as fallback
-    allowDirect: true, directLabel: 'Or enter ROIC % directly',
-  },
-  netDebtEbitda: {
-    type:'single', label:'Net Debt / EBITDA', threshold:3, unit:'x', lowerIsBetter:true,
-    components: [
-      { key:'netDebt', label:'Net Debt',  placeholder:'e.g. 8000000000', hint:'Total debt minus cash' },
-      { key:'ebitda',  label:'EBITDA',    placeholder:'e.g. 12000000000', hint:'Earnings before interest, tax, D&A' },
-    ],
-    compute: c => c.netDebt != null && c.ebitda != null && c.ebitda !== 0
-      ? c.netDebt / c.ebitda : null,
-    format: v => v.toFixed(2) + 'x',
-    allowDirect: true, directLabel: 'Or enter ratio directly',
-  },
-};
-
-function applyManualOverrides(name, quantCriteria) {
-  if (!quantCriteria) return quantCriteria;
-  const overrides = _manualOverrides[name.toLowerCase()];
-  if (!overrides) return quantCriteria;
-  return quantCriteria.map(q => {
-    const ov = overrides[q.key];
-    if (ov == null) return q;
-    const cfg = QUANT_CRITERIA_CONFIG[q.key];
-    if (!cfg) return q;
-    let pass, value;
-    if (cfg.type === 'dual') {
-      const hist = ov.hist ?? null;
-      const fwd  = ov.fwd  ?? null;
-      const hPass = hist != null ? hist > cfg.thresholds[0] : null;
-      const fPass = fwd  != null ? fwd  > cfg.thresholds[1] : null;
-      pass  = hPass !== null && fPass !== null ? (hPass && fPass) : hPass !== null ? hPass : fPass;
-      value = [hist != null ? hist.toFixed(1)+'% (5Y)' : null, fwd != null ? fwd.toFixed(1)+'% (fwd)' : null].filter(Boolean).join(' · ');
-    } else if (cfg.components) {
-      // Component-based: compute the criterion from stored component values
-      let computed = null;
-      if (typeof ov === 'object' && !Array.isArray(ov) && cfg.compute) {
-        computed = cfg.compute(ov);
-      } else if (typeof ov === 'number') {
-        // Legacy direct value
-        computed = ov;
-      }
-      if (computed == null) return q;
-      pass  = cfg.lowerIsBetter ? computed < cfg.threshold : computed > cfg.threshold;
-      value = cfg.format ? cfg.format(computed) : computed.toFixed(1) + cfg.unit;
-    } else {
-      const v = +ov;
-      pass  = cfg.lowerIsBetter ? v < cfg.threshold : v > cfg.threshold;
-      value = v.toFixed(1) + cfg.unit;
-    }
-    return { ...q, pass, value, _manual: true, nullReason: null };
-  });
-}
-
-// Build a skeleton quantCriteria from saved overrides when no scan data is available
-// (e.g. after reload, opening a watchlist stock that was never re-scanned)
-function buildQuantCriteriaFromOverrides(name) {
-  const overrides = _manualOverrides[name.toLowerCase()];
-  if (!overrides || !Object.keys(overrides).length) return null;
-
-  const SKELETON = [
-    { key:'revGrowth',    label:'Revenue Growth > 9% (5Y CAGR), > 7% (fwd)', icon:'🚀' },
-    { key:'epsGrowth',    label:'EPS Growth > 12% (hist 5Y), fwd 2Y CAGR > 9%', icon:'💹' },
-    { key:'fcfConv',      label:'FCF / Net Income > 80%', icon:'🔄' },
-    { key:'netMargin',    label:'Profit Margin > 10%', icon:'📈' },
-    { key:'roic',         label:'ROIC > 15%', icon:'💰' },
-    { key:'netDebtEbitda',label:'Net Debt / EBITDA < 3x', icon:'🏦' },
-  ];
-
-  const criteria = SKELETON.map(s => ({
-    ...s,
-    pass:      null,
-    value:     null,
-    nullReason: 'No scan data — run a scan to fetch live data, or use manual entry below',
-    _origNullReason: 'No scan data',
-  }));
-
-  return applyManualOverrides(name, criteria);
-}
-
-function recalcQuantScore(quantCriteria) {
-  if (!quantCriteria) return { quantScore: null, quantMissing: 0 };
-  const withData  = quantCriteria.filter(q => q.pass !== null);
-  const points    = withData.filter(q => q.pass).length;
-  const missing   = quantCriteria.length - withData.length;
-  const quantScore = withData.length > 0 ? Math.round((points / withData.length) * 100) : null;
-  return { quantScore, quantMissing: missing };
-}
-
-function saveManualCriterion(name, key, value) {
-  const k = name.toLowerCase();
-  if (!_manualOverrides[k]) _manualOverrides[k] = {};
-  _manualOverrides[k][key] = value;
-  saveManualOverrides();
-}
-
-function clearManualCriterion(name, key) {
-  const k = name.toLowerCase();
-  if (_manualOverrides[k]) {
-    delete _manualOverrides[k][key];
-    if (!Object.keys(_manualOverrides[k]).length) delete _manualOverrides[k];
-  }
-  saveManualOverrides();
-}
-
-// ── Missing-values modal (scan cards) ────────────────────────────────────────
-let _missingModalName = null;
-
-function openMissingModal(btn) {
-  const name = btn.dataset.name;
-  _missingModalName = name;
-  // Find the stock in current scan results
-  const allScanned = window._lastScanResults || [];
-  const stock = allScanned.find(s => s.name === name);
-  if (!stock) return;
-  const nullCriteria = (stock.quantCriteria || []).filter(q => q.pass === null);
-  if (!nullCriteria.length) return;
-
-  document.getElementById('missing-modal-title').textContent = 'Add Missing Values';
-  document.getElementById('missing-modal-sub').textContent = stock.name + (stock.ticker ? ' · ' + stock.ticker : '');
-
-  const existing = _manualOverrides[name.toLowerCase()] || {};
-  let html = '';
-  nullCriteria.forEach(q => {
-    const cfg = QUANT_CRITERIA_CONFIG[q.key];
-    if (!cfg) return;
-    html += `<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">`;
-    html += `<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:8px">${q.icon} ${q.label}</div>`;
-    if (cfg.type === 'dual') {
-      cfg.keys.forEach((k, i) => {
-        const val = existing[q.key]?.[k] ?? '';
-        html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-          <label style="font-size:11px;color:var(--text-3);width:130px;flex-shrink:0">${cfg.labels[i]}</label>
-          <input class="manual-entry-input" style="flex:1" id="mmissing-${q.key}-${k}" type="number" step="0.1" placeholder="${cfg.thresholds[i]}" value="${val}">
-        </div>`;
-      });
-    } else if (cfg.components) {
-      cfg.components.forEach(comp => {
-        const val = (typeof existing[q.key] === 'object' && existing[q.key] !== null) ? (existing[q.key][comp.key] ?? '') : '';
-        html += `<div style="margin-bottom:8px">
-          <div style="font-size:11px;color:var(--text-3);margin-bottom:3px">${comp.label}</div>
-          <input class="manual-entry-input" style="width:100%;box-sizing:border-box" id="mmissing-${q.key}-${comp.key}" type="number" step="any" placeholder="${comp.placeholder}" value="${val}">
-          ${comp.hint ? `<div style="font-size:10px;color:var(--text-3);margin-top:2px">${comp.hint}</div>` : ''}
-        </div>`;
-      });
-      if (cfg.allowDirect) {
-        const directVal = (typeof existing[q.key] === 'number') ? existing[q.key] : '';
-        html += `<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
-          <div style="font-size:11px;color:var(--text-3);margin-bottom:3px">${cfg.directLabel}</div>
-          <input class="manual-entry-input" style="width:100%;box-sizing:border-box" id="mmissing-${q.key}-direct" type="number" step="0.1" placeholder="${cfg.threshold}" value="${directVal}">
-        </div>`;
-      }
-    } else {
-      const val = existing[q.key] ?? '';
-      html += `<div style="display:flex;align-items:center;gap:8px">
-        <label style="font-size:11px;color:var(--text-3);width:130px;flex-shrink:0">${cfg.label} (${cfg.unit})</label>
-        <input class="manual-entry-input" style="flex:1" id="mmissing-${q.key}" type="number" step="0.1" placeholder="${cfg.threshold}" value="${val}">
-      </div>`;
-    }
-    html += `</div>`;
-  });
-  document.getElementById('missing-modal-body').innerHTML = html;
-
-  document.getElementById('missing-modal-backdrop').classList.add('open');
-  document.getElementById('missing-modal').classList.add('open');
-  setTimeout(() => { const el = document.querySelector('#missing-modal input'); if (el) el.focus(); }, 50);
-}
-
-function closeMissingModal() {
-  document.getElementById('missing-modal-backdrop').classList.remove('open');
-  document.getElementById('missing-modal').classList.remove('open');
-  _missingModalName = null;
-}
-
-function submitMissingModal() {
-  const name = _missingModalName;
-  if (!name) return;
-  const allScanned = window._lastScanResults || [];
-  const stock = allScanned.find(s => s.name === name);
-  if (!stock) return;
-  const nullCriteria = (stock.quantCriteria || []).filter(q => q.pass === null);
-
-  nullCriteria.forEach(q => {
-    const cfg = QUANT_CRITERIA_CONFIG[q.key];
-    if (!cfg) return;
-    if (cfg.type === 'dual') {
-      const vals = {};
-      let anyFilled = false;
-      cfg.keys.forEach(k => {
-        const el = document.getElementById(`mmissing-${q.key}-${k}`);
-        if (el && el.value !== '') { vals[k] = parseFloat(el.value); anyFilled = true; }
-      });
-      if (anyFilled) saveManualCriterion(name, q.key, vals);
-    } else if (cfg.components) {
-      const comps = {};
-      let anyComp = false;
-      cfg.components.forEach(comp => {
-        const el = document.getElementById(`mmissing-${q.key}-${comp.key}`);
-        if (el && el.value !== '') { comps[comp.key] = parseFloat(el.value); anyComp = true; }
-      });
-      if (anyComp) {
-        saveManualCriterion(name, q.key, comps);
-      } else if (cfg.allowDirect) {
-        const el = document.getElementById(`mmissing-${q.key}-direct`);
-        if (el && el.value !== '') saveManualCriterion(name, q.key, parseFloat(el.value));
-      }
-    } else {
-      const el = document.getElementById(`mmissing-${q.key}`);
-      if (el && el.value !== '') saveManualCriterion(name, q.key, parseFloat(el.value));
-    }
-  });
-
-  // Patch the scanResults entry with updated criteria + scores
-  const idx = scanResults.findIndex(s => s.name === name);
-  if (idx !== -1) {
-    const s = scanResults[idx];
-    const patched = applyManualOverrides(name, s.quantCriteria || []);
-    const { quantScore, quantMissing } = recalcQuantScore(patched);
-    const passCount = patched.filter(q => q.pass === true).length;
-    const totalCrit = patched.filter(q => q.pass !== null).length;
-    scanResults[idx] = { ...s, quantCriteria: patched, quantScore, quantMissing };
-  }
-
-  closeMissingModal();
-  if (window._lastRenderScan) window._lastRenderScan();
-}
-
-function openManualEntry(nameOrBtn, key, containerId) {
-  let name = nameOrBtn, cid = containerId;
-  if (nameOrBtn && typeof nameOrBtn === 'object' && nameOrBtn.dataset) {
-    name = nameOrBtn.dataset.name;
-    key  = nameOrBtn.dataset.key;
-    cid  = nameOrBtn.dataset.target;
-  }
-  const cfg = QUANT_CRITERIA_CONFIG[key];
-  if (!cfg) return;
-  const existing = (_manualOverrides[name.toLowerCase()] || {})[key];
-  const container = document.getElementById(cid);
-  if (!container) return;
-
-  let html = '<div class="manual-entry-wrap" style="flex-direction:column;align-items:stretch;gap:8px">';
-
-  if (cfg.type === 'dual') {
-    html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-    cfg.keys.forEach((k, i) => {
-      const val = existing?.[k] ?? '';
-      html += `<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:100px">
-        <span class="manual-entry-label">${cfg.labels[i]}</span>
-        <input class="manual-entry-input" id="mentry-${key}-${k}" type="number" step="0.1" placeholder="${cfg.thresholds[i]}" value="${val}" style="width:100%">
-      </div>`;
-    });
-    html += '</div>';
-  } else if (cfg.components) {
-    cfg.components.forEach(comp => {
-      const val = (typeof existing === 'object' && existing !== null) ? (existing[comp.key] ?? '') : '';
-      html += `<div style="display:flex;flex-direction:column;gap:3px">
-        <span class="manual-entry-label">${comp.label}</span>
-        <input class="manual-entry-input" id="mentry-${key}-${comp.key}" type="number" step="any" placeholder="${comp.placeholder}" value="${val}" style="width:100%">
-        ${comp.hint ? `<span style="font-size:10px;color:var(--text-3)">${comp.hint}</span>` : ''}
-      </div>`;
-    });
-    if (cfg.allowDirect) {
-      const directVal = (typeof existing === 'number') ? existing : '';
-      html += `<div style="border-top:1px solid var(--border);padding-top:6px;display:flex;flex-direction:column;gap:3px">
-        <span class="manual-entry-label" style="color:var(--text-3)">${cfg.directLabel}</span>
-        <input class="manual-entry-input" id="mentry-${key}-direct" type="number" step="0.1" placeholder="${cfg.threshold}" value="${directVal}" style="width:100%">
-      </div>`;
-    }
-  } else {
-    const val = existing ?? '';
-    html += `<div style="display:flex;align-items:center;gap:8px">
-      <span class="manual-entry-label">${cfg.label} (${cfg.unit})</span>
-      <input class="manual-entry-input" id="mentry-${key}" type="number" step="0.1" placeholder="${cfg.threshold}" value="${val}" style="flex:1">
-    </div>`;
-  }
-
-  html += `<div style="display:flex;gap:6px">
-    <button class="manual-entry-save" onclick="submitManualEntry(${JSON.stringify(name)},${JSON.stringify(key)})">Save</button>
-    ${existing != null ? `<button class="manual-entry-clear" onclick="clearManualEntry(${JSON.stringify(name)},${JSON.stringify(key)})">Clear</button>` : ''}
-  </div>`;
-  html += '</div>';
-  container.innerHTML = html;
-  setTimeout(() => { const el = container.querySelector('input'); if (el) el.focus(); }, 30);
-}
-
-function submitManualEntry(name, key) {
-  const cfg = QUANT_CRITERIA_CONFIG[key];
-  if (!cfg) return;
-  let value;
-
-  if (cfg.type === 'dual') {
-    value = {};
-    cfg.keys.forEach(k => {
-      const el = document.getElementById('mentry-' + key + '-' + k);
-      if (el && el.value !== '') value[k] = parseFloat(el.value);
-    });
-    if (!Object.keys(value).length) return;
-  } else if (cfg.components) {
-    const comps = {};
-    let anyComp = false;
-    cfg.components.forEach(comp => {
-      const el = document.getElementById('mentry-' + key + '-' + comp.key);
-      if (el && el.value !== '') { comps[comp.key] = parseFloat(el.value); anyComp = true; }
-    });
-    if (anyComp) {
-      value = comps;
-    } else if (cfg.allowDirect) {
-      const el = document.getElementById('mentry-' + key + '-direct');
-      if (!el || el.value === '') return;
-      value = parseFloat(el.value);
-    } else { return; }
-  } else {
-    const el = document.getElementById('mentry-' + key);
-    if (!el || el.value === '') return;
-    value = parseFloat(el.value);
-  }
-
-  saveManualCriterion(name, key, value);
-  const cached = _stockDetailCache[name.toLowerCase()];
-  if (cached) {
-    const updated = { ...cached };
-    updated.quantCriteria = applyManualOverrides(name, cached.quantCriteria);
-    const { quantScore, quantMissing } = recalcQuantScore(updated.quantCriteria);
-    updated.quantScore   = quantScore;
-    updated.quantMissing = quantMissing;
-    if (updated.qualScore != null && quantScore != null)
-      updated.finalScore = Math.round(quantScore * 0.6 + updated.qualScore * 0.4);
-    _stockDetailCache[name.toLowerCase()] = updated;
-    renderStockDetail(updated);
-  }
-}
-
-
-function clearManualEntry(name, key) {
-  clearManualCriterion(name, key);
-  const cached = _stockDetailCache[name.toLowerCase()];
-  if (cached) {
-    // Re-apply remaining overrides
-    const original = { ...cached };
-    // We need to restore original null — simplest is to re-fetch, but for UX just mark as null
-    const q = original.quantCriteria?.find(c => c.key === key);
-    if (q) {
-      original.quantCriteria = original.quantCriteria.map(c =>
-        c.key === key ? { ...c, pass: null, value: null, _manual: false, nullReason: c._origNullReason || 'Data unavailable — was manually cleared' } : c
-      );
-      const { quantScore, quantMissing } = recalcQuantScore(original.quantCriteria);
-      original.quantScore   = quantScore;
-      original.quantMissing = quantMissing;
-      _stockDetailCache[name.toLowerCase()] = original;
-      renderStockDetail(original);
-    }
-  }
-}
-
 function buildStockDetailData(name, scanData, realData, aiData, realError) {
   // Prefer already-fetched realData from the scan result over the freshly fetched one
   // (avoids redundant API calls and ensures consistency)
@@ -4691,36 +4129,8 @@ function buildStockDetailData(name, scanData, realData, aiData, realError) {
       capLight: aiData.qualityScores.capLight?.score || 0,
       _reasons: Object.fromEntries(Object.entries(aiData.qualityScores).map(([k,v]) => [k, v?.reason || ''])),
     } : null),
-    quantCriteria: (() => {
-      const base = scanData?.quantCriteria || null;
-      if (base) {
-        const withOrigReasons = base.map(q => ({ ...q, _origNullReason: q.nullReason }));
-        return applyManualOverrides(name, withOrigReasons);
-      }
-      // No scan data — reconstruct from saved overrides so manual entries survive reload
-      return buildQuantCriteriaFromOverrides(name);
-    })(),
-    quantScore: (() => {
-      const base = scanData?.quantCriteria || buildQuantCriteriaFromOverrides(name);
-      if (!base) return scanData?.quantScore || null;
-      const patched = applyManualOverrides(name, base);
-      return recalcQuantScore(patched).quantScore ?? scanData?.quantScore ?? null;
-    })(),
-    quantMissing: (() => {
-      const base = scanData?.quantCriteria || buildQuantCriteriaFromOverrides(name);
-      if (!base) return scanData?.quantMissing ?? 0;
-      const patched = applyManualOverrides(name, base);
-      return recalcQuantScore(patched).quantMissing;
-    })(),
-    qualScore:     scanData?.qualScore     || null,
-    finalScore: (() => {
-      const qs = scanData?.quantScore ?? null;
-      const ql = scanData?.qualScore  ?? null;
-      const sf = scanData?.finalScore ?? null;
-      if (sf != null) return sf;
-      if (qs != null && ql != null) return Math.round(qs * 0.6 + ql * 0.4);
-      return ql ?? qs ?? null;
-    })(),
+    qualScore:     scanData?.qualScore  || null,
+    finalScore:    scanData?.finalScore || null,
     totalScore:    scanData?.totalScore    || null,
     verdict:       scanData?.verdict       || null,
     bullCase:    aiData?.bullCase      || [],
@@ -4772,19 +4182,6 @@ function renderStockDetail(d) {
     const verdictPill = d.verdict
       ? '<div style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:3px 12px;border-radius:20px;background:' + (d.verdict==='BUY'?'rgba(34,197,94,.12)':d.verdict==='WATCH'?'rgba(245,158,11,.12)':'rgba(90,96,122,.12)') + ';border:1px solid ' + (d.verdict==='BUY'?'rgba(34,197,94,.3)':d.verdict==='WATCH'?'rgba(245,158,11,.3)':'rgba(90,96,122,.3)') + '"><span style="width:7px;height:7px;border-radius:50%;background:' + verdictColor + '"></span><span style="font-size:12px;font-weight:700;color:' + verdictColor + '">' + d.verdict + '</span></div>'
       : '';
-    const quantMissing = d.quantMissing || 0;
-    const qnTile = d.quantScore != null
-      ? '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px">'
-        + '<div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Quantitative · 60%'
-        + (quantMissing > 0 ? ' <span style="color:var(--amber)">⚠ ' + quantMissing + ' missing</span>' : '')
-        + '</div>'
-        + '<div style="font-size:18px;font-weight:700;color:var(--text)">' + d.quantScore + '<span style="font-size:10px;color:var(--text-3);font-weight:400">/100</span></div>'
-        + (quantMissing > 0 ? '<div style="font-size:10px;color:var(--amber);margin-top:3px;line-height:1.4">Based on ' + (6 - quantMissing) + '/6 criteria</div>' : '')
-        + '</div>'
-      : '';
-    const qlTile = d.qualScore != null
-      ? '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Qualitative · 40%</div><div style="font-size:18px;font-weight:700;color:var(--text)">' + d.qualScore + '<span style="font-size:10px;color:var(--text-3);font-weight:400">/100</span></div></div>'
-      : '';
     return '<div class="stock-detail-card full" style="background:linear-gradient(135deg,rgba(79,124,247,.05),rgba(79,124,247,.01));border-color:rgba(79,124,247,.2)">'
       + '<div class="stock-card-title" style="margin-bottom:14px">Quality Score</div>'
       + '<div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">'
@@ -4797,7 +4194,6 @@ function renderStockDetail(d) {
       + '</svg></div>'
       + '<div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:10px">'
       + '<div><div style="font-size:22px;font-weight:800;color:' + scoreColor + ';line-height:1">' + scoreLabel + '</div>' + verdictPill + '</div>'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' + qnTile + qlTile + '</div>'
       + '</div></div></div>';
   }
 
@@ -4810,48 +4206,6 @@ function renderStockDetail(d) {
     { key:'recurring',  label:'Recurring Revenue',   icon:'🔄' },
     { key:'capLight',   label:'Capital-Light Model', icon:'🏭' },
   ];
-
-  const quantHTML = d.quantCriteria?.length ? (() => {
-    const dName = d.name;
-    const rows = d.quantCriteria.map(q => {
-      const icon    = q.pass === true ? '✓' : q.pass === false ? '✗' : '—';
-      const col     = q.pass === true ? 'var(--green)' : q.pass === false ? 'var(--red)' : 'var(--text-3)';
-      const val     = q.value ? '<span style="font-size:10px;color:var(--text-3);margin-right:6px">' + q.value + '</span>' : '';
-      const manBadge = q._manual ? '<span class="manual-badge">manual</span>' : '';
-      const entryId = 'mentry-wrap-' + q.key;
-      const nullSection = q.pass === null
-        ? '<div style="margin-top:4px;padding-left:26px">'
-          + '<div style="font-size:11px;color:var(--amber);line-height:1.5">⚠ ' + (q.nullReason || 'Data unavailable') + '</div>'
-          + '<div style="margin-top:4px"><button class="manual-entry-btn" onclick="openManualEntry(this)" data-name="' + dName.replace(/"/g,'&quot;') + '" data-key="' + q.key + '" data-target="' + entryId + '">✏ Enter manually</button></div>'
-          + '<div id="' + entryId + '"></div>'
-          + '</div>'
-        : (q._manual
-          ? '<div style="margin-top:2px;padding-left:26px"><button class="manual-entry-btn" style="color:var(--text-3)" onclick="openManualEntry(this)" data-name="' + dName.replace(/"/g,'&quot;') + '" data-key="' + q.key + '" data-target="' + entryId + '">✏ Edit</button><div id="' + entryId + '"></div></div>'
-          : '');
-      return '<div style="padding:4px 0;border-bottom:1px solid var(--border)">'
-        + '<div style="display:flex;align-items:center;gap:7px">'
-        + '<span style="font-size:14px">' + q.icon + '</span>'
-        + '<span style="font-size:11px;color:var(--text-2);flex:1">' + q.label + manBadge + '</span>'
-        + val
-        + '<span style="font-size:13px;font-weight:700;color:' + col + ';min-width:14px;text-align:right">' + icon + '</span>'
-        + '</div>'
-        + nullSection
-        + '</div>';
-    }).join('');
-    const footer = d.quantScore != null
-      ? '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">'
-        + 'Quantitative score: <strong style="color:var(--text)">' + d.quantScore + '/100</strong>'
-        + ((d.quantMissing || 0) > 0
-          ? '<span style="margin-left:10px;color:var(--amber)">⚠ Based on ' + (6-(d.quantMissing||0)) + '/6 criteria — ' + d.quantMissing + ' could not be evaluated</span>'
-          : '<span style="color:var(--text-3)"> · all 6 criteria evaluated</span>')
-        + '</div>'
-      : '';
-    return '<div class="stock-detail-card full">'
-      + '<div class="stock-card-title">Quantitative Criteria</div>'
-      + '<div style="display:flex;flex-direction:column;margin-top:6px">' + rows + '</div>'
-      + footer
-      + '</div>';
-  })() : '';
 
   const qualHTML = d.scores ? (() => {
     const activeKeys = QUAL_KEYS.filter(c => +(d.scores[c.key] || 0) > 0);
@@ -4934,7 +4288,7 @@ function renderStockDetail(d) {
     </div>`;
   })() : '';
 
-  const scoresHTML = (d.scores || d.quantCriteria || d.finalScore)
+  const scoresHTML = (d.scores || d.finalScore)
     ? buildScoreGauge(d)
     : '';
   function metricRow(label, value, color) {
@@ -5226,7 +4580,6 @@ function renderStockDetail(d) {
       <div class="stock-detail-grid">
         ${scoresHTML}
         ${qualHTML}
-        ${quantHTML}
         ${finHTML}
         ${valHTML}
         ${tgtsHTML}
@@ -5268,7 +4621,6 @@ const LS = {
 function persistAll() {
   LS.set('settings', _settings);
   LS.set('watchlist', watchlist);
-  LS.set('manualOverrides', _manualOverrides);
 }
 
 function persistPortfolio() {
@@ -5282,8 +4634,6 @@ function restoreAll() {
   if (s) Object.assign(_settings, s);
   const wl = LS.get('watchlist');
   if (wl && Array.isArray(wl)) watchlist = wl;
-  const mo = LS.get('manualOverrides');
-  if (mo && typeof mo === 'object') Object.assign(_manualOverrides, mo);
   const pr = LS.get('portfolioRows');
   if (pr && Array.isArray(pr) && pr.length) {
     portfolioRows = pr;
@@ -5613,21 +4963,6 @@ try {
 }
 </script>
 <div id="init-error-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#ef4444;color:#fff;padding:10px 16px;font-size:13px;font-family:monospace;white-space:pre-wrap;word-break:break-all"></div>
-<div class="modal-backdrop" id="missing-modal-backdrop" onclick="closeMissingModal()"></div>
-<div class="modal" id="missing-modal">
-  <div class="modal-header">
-    <div>
-      <div class="modal-title" id="missing-modal-title">Add Missing Values</div>
-      <div class="modal-sub" id="missing-modal-sub"></div>
-    </div>
-    <button class="modal-close" onclick="closeMissingModal()">✕</button>
-  </div>
-  <div class="modal-body" id="missing-modal-body"></div>
-  <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
-    <button class="manual-entry-clear" onclick="closeMissingModal()">Cancel</button>
-    <button class="manual-entry-save" style="font-size:12px;padding:6px 18px" onclick="submitMissingModal()">Save</button>
-  </div>
-</div>
 <div class="modal-backdrop" id="target-modal-backdrop" onclick="closeTargetModal()"></div>
 <div class="modal" id="target-modal" style="width:min(420px,92vw)">
   <div class="modal-header">
