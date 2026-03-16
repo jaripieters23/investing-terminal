@@ -786,6 +786,8 @@ const WORKERS = {
 // ═══════════════════════════════════════════════════════════════
 let portfolioRows = null;
 let txRows = null;
+// Manual low targets for holdings: { 'ISIN': { low, updatedAt } }
+let _holdingTargets = (() => { try { return JSON.parse(localStorage.getItem('pa_holdingTargets') || '{}'); } catch { return {}; } })();
 let allPerfData = null;
 let activePeriod = 'ALL';
 let perfChartInst = null;
@@ -916,6 +918,7 @@ const HCAT_DEFS = {
 
 function renderHoldingsPage(key) {
   if (!portfolioRows) return;
+  window._currentHoldingsKey = key;
   const def   = HCAT_DEFS[key];
   if (!def) return;
   const rows  = portfolioRows;
@@ -1931,26 +1934,43 @@ function clsGroup(cls) {
 
 function holdingsTableHTML(rows, total) {
   const hasStocks = rows.some(r => r.cls === 'Stock');
-  return `<div class="table-scroll"><table><thead><tr><th>Name</th><th class="right">Value</th><th class="right">Weight</th><th class="right">Qty</th><th class="right">Price</th>${hasStocks ? '<th class="right" title="Lowest analyst price target">Low Target</th>' : ''}</tr></thead><tbody>
+  return `<div class="table-scroll"><table><thead><tr><th>Name</th><th class="right">Value</th><th class="right">Weight</th><th class="right">Qty</th><th class="right">Price</th>${hasStocks ? '<th class="right" title="Low price target">Low Target</th>' : ''}</tr></thead><tbody>
   ${rows.map(r => {
     const w = r.valueEUR / total * 100;
     const canClick = r.cls === 'Stock';
     const shortName = r.product.split(' ').slice(0, 4).join(' ');
-    const sym2 = r._currency === 'USD' ? '$' : r._currency === 'GBP' ? '£' : '€';
-    const targetCell = hasStocks ? (canClick
-      ? (r._targetLow != null
-          ? `<td class="right holding-num" style="color:var(--green);font-weight:600">${sym2}${r._targetLow.toFixed(2)}</td>`
-          : `<td class="right holding-num" style="color:var(--text-3);font-size:10px">No data</td>`)
-      : `<td class="right">—</td>`) : '';
-    return `<tr><td><div class="holding-name ${canClick ? 'stock-link' : ''}" title="${r.product}" ${canClick ? `onclick="showStockDetail('${shortName.replace(/'/g,"\\'")}','dashboard')"` : ''}>${r.product}</div><div class="holding-isin">${r.isin || '—'}</div></td>
-    <td class="right holding-val private">${_settings.currency === 'USD' ? '$' : _settings.currency === 'GBP' ? '£' : '€'}${r.valueEUR.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    const sym2 = r._currency === 'USD' ? '$' : r._currency === 'GBP' ? '\u00a3' : '\u20ac';
+    const key = r.isin || r.product;
+    const manual = canClick ? (_holdingTargets[key] || null) : null;
+    const effectiveLow = manual?.low ?? r._targetLow ?? null;
+    const isManual = manual?.low != null;
+    const isStale = isManual && manual.updatedAt && (Date.now() - new Date(manual.updatedAt).getTime()) > 14 * 24 * 60 * 60 * 1000;
+    let targetCell = '';
+    if (hasStocks) {
+      if (!canClick) {
+        targetCell = '<td class="right">\u2014</td>';
+      } else {
+        const tColor = isStale ? 'var(--red)' : 'var(--green)';
+        const valStr = effectiveLow != null
+          ? `<span style="color:${tColor};font-weight:600">${sym2}${effectiveLow.toFixed(2)}</span>`
+          : `<span style="color:var(--text-3);font-size:10px">\u2014</span>`;
+        const badge = isManual
+          ? `<span class="wl-target-info" data-tip="${isStale ? '\u26a0 Outdated \u00b7 ' : ''}Manual \u00b7 ${new Date(manual.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}" style="background:${isStale ? 'rgba(239,68,68,.15)' : 'rgba(79,124,247,.15)'};color:${isStale ? 'var(--red)' : 'var(--blue)'}">i</span>`
+          : '';
+        const safeKey = key.replace(/"/g,'&quot;');
+        const safeName = shortName.replace(/"/g,'&quot;');
+        const safeSym = sym2.replace(/"/g,'&quot;');
+        targetCell = `<td class="right holding-num" style="white-space:nowrap"><div style="display:inline-flex;align-items:center;gap:4px">${valStr}${badge}<button class="wl-edit-target-btn" style="padding:1px 5px;font-size:9px" data-key="${safeKey}" data-name="${safeName}" data-sym="${safeSym}" onclick="openHoldingTargetModal(this.dataset.key,this.dataset.name,this.dataset.sym)">\u270f</button></div></td>`;
+      }
+    }
+    return `<tr><td><div class="holding-name ${canClick ? 'stock-link' : ''}" title="${r.product}" ${canClick ? `onclick="showStockDetail('${shortName.replace(/'/g,"\\'")}','dashboard')"` : ''}>${r.product}</div><div class="holding-isin">${r.isin || '\u2014'}</div></td>
+    <td class="right holding-val private">${_settings.currency === 'USD' ? '$' : _settings.currency === 'GBP' ? '\u00a3' : '\u20ac'}${r.valueEUR.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
     <td class="right"><div class="w-cell"><span class="w-pct">${w.toFixed(1)}%</span><div class="w-bg"><div class="w-fill" style="width:${Math.min(100,w*4)}%"></div></div></div></td>
-    <td class="right holding-num private">${r.qty || '—'}</td>
-    <td class="right holding-num private">${r.price ? r.price.toFixed(2) : '—'}</td>${targetCell}</tr>`;
+    <td class="right holding-num private">${r.qty || '\u2014'}</td>
+    <td class="right holding-num private">${r.price ? r.price.toFixed(2) : '\u2014'}</td>${targetCell}</tr>`;
   }).join('')}
   </tbody></table></div>`;
 }
-
 function renderGroupedHoldings(rows, total, filter) {
   const container = document.getElementById('holdings-grouped');
   const titleEl   = document.getElementById('holdings-title');
@@ -2886,6 +2906,7 @@ function renderWatchlistTable() {
 
 
 let _targetModalName = null;
+let _targetModalSubmitFn = null;
 
 function toggleTargetForm(name) {
   openTargetModal(name);
@@ -2958,12 +2979,14 @@ function openTargetModal(name) {
 
   document.getElementById('target-modal-backdrop').classList.add('open');
   document.getElementById('target-modal').classList.add('open');
+  _targetModalSubmitFn = submitTargetModal;
   setTimeout(() => { document.getElementById('tmod-price')?.focus(); }, 50);
 }
 function closeTargetModal() {
   document.getElementById('target-modal-backdrop').classList.remove('open');
   document.getElementById('target-modal').classList.remove('open');
   _targetModalName = null;
+  _targetModalSubmitFn = null;
 }
 
 function submitTargetModal() {
@@ -3010,6 +3033,73 @@ function clearManualTarget(name) {
   delete watchlist[idx].manualTargetUpdatedAt;
   saveWatchlist();
   renderWatchlistTable();
+}
+
+// ── Holding manual targets ────────────────────────────────────────────────────
+function saveHoldingTargets() {
+  try { localStorage.setItem('pa_holdingTargets', JSON.stringify(_holdingTargets)); } catch {}
+  // Push to Supabase
+  clearTimeout(saveHoldingTargets._timer);
+  saveHoldingTargets._timer = setTimeout(() => {
+    supabasePushFile('holdingTargets', btoa(JSON.stringify(_holdingTargets))).catch(() => {});
+  }, 2000);
+}
+
+function openHoldingTargetModal(key, name, sym) {
+  const existing = _holdingTargets[key] || {};
+  const curLow = existing.low ?? '';
+
+  // Reuse the target modal
+  document.getElementById('target-modal-title').textContent = name;
+  document.getElementById('target-modal-sub').textContent = key + (sym ? ' · ' + sym : '');
+
+  const body = document.getElementById('target-modal-body');
+  body.innerHTML = '';
+
+  const iStyle = 'width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:8px 10px;font-family:Inter,sans-serif;box-sizing:border-box';
+
+  const wrap = document.createElement('div');
+  const lbl = document.createElement('label');
+  lbl.style.cssText = 'font-size:11px;color:var(--text-3);margin-bottom:5px;display:block';
+  lbl.textContent = 'Low Target (' + sym + ')';
+  const inp = document.createElement('input');
+  inp.id = 'htmod-low'; inp.type = 'number'; inp.step = '0.01';
+  inp.placeholder = 'e.g. 120.00'; inp.value = curLow; inp.style.cssText = iStyle;
+  wrap.append(lbl, inp);
+  body.appendChild(wrap);
+
+  if (existing.low != null) {
+    const updTxt = document.createElement('div');
+    updTxt.style.cssText = 'font-size:10px;color:var(--text-3);margin-top:8px';
+    updTxt.textContent = 'Last updated: ' + new Date(existing.updatedAt).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    body.appendChild(updTxt);
+
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'wl-target-clear';
+    clearBtn.style.marginTop = '12px';
+    clearBtn.textContent = 'Clear target';
+    clearBtn.onclick = () => {
+      delete _holdingTargets[key];
+      saveHoldingTargets();
+      renderHoldingsPage(window._currentHoldingsKey || 'all');
+      closeTargetModal();
+    };
+    body.appendChild(clearBtn);
+  }
+
+  document.getElementById('target-modal-backdrop').classList.add('open');
+  document.getElementById('target-modal').classList.add('open');
+  _targetModalSubmitFn = () => submitHoldingTargetModal(key);
+  setTimeout(() => inp.focus(), 50);
+}
+
+function submitHoldingTargetModal(key) {
+  const low = parseFloat(document.getElementById('htmod-low')?.value) || null;
+  if (!low) { closeTargetModal(); return; }
+  _holdingTargets[key] = { low, updatedAt: new Date().toISOString() };
+  saveHoldingTargets();
+  renderHoldingsPage(window._currentHoldingsKey || 'all');
+  closeTargetModal();
 }
 
 async function refreshWatchlist() {
@@ -4895,6 +4985,20 @@ async function supabasePullFiles() {
       LS.set('file_acct_b64', b64);
     });
 
+    // Restore holding targets (stored as base64-encoded JSON, not xlsx)
+    const htRow = files['holdingTargets'];
+    if (htRow && htRow.data) {
+      try {
+        const parsed = JSON.parse(atob(htRow.data));
+        if (parsed && typeof parsed === 'object') {
+          Object.assign(_holdingTargets, parsed);
+          localStorage.setItem('pa_holdingTargets', JSON.stringify(_holdingTargets));
+          loaded = true;
+          console.log('[Supabase] holdingTargets restored:', Object.keys(parsed).length, 'entries');
+        }
+      } catch(e) { console.warn('[Supabase] holdingTargets restore failed:', e.message); }
+    }
+
     return loaded;
   } catch(e) {
     console.warn('[Supabase] file pull failed:', e.message);
@@ -4908,6 +5012,10 @@ async function supabasePushLocalFiles() {
   for (const key of keys) {
     const b64 = LS.get('file_' + key + '_b64');
     if (b64) await supabasePushFile(key, b64).catch(() => {});
+  }
+  // Also push holding targets if any exist
+  if (Object.keys(_holdingTargets).length) {
+    await supabasePushFile('holdingTargets', btoa(JSON.stringify(_holdingTargets))).catch(() => {});
   }
 }
 
@@ -4977,7 +5085,7 @@ try {
   </div>
   <div class="modal-footer">
     <button class="wl-target-clear" onclick="closeTargetModal()">Cancel</button>
-    <button class="wl-target-save" style="font-size:12px;padding:6px 18px" onclick="submitTargetModal()">Save</button>
+    <button class="wl-target-save" style="font-size:12px;padding:6px 18px" onclick="_targetModalSubmitFn && _targetModalSubmitFn()">Save</button>
   </div>
 </div>
 
