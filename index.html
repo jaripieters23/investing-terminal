@@ -2384,32 +2384,36 @@ async function runScan(forceAll) {
       btn.innerHTML = 'Scan &#9654;';
       return;
     }
-    if (skippedCount > 0) {
-      resultsEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">Skipping ' + skippedCount + ' already-tracked stock(s) — scanning ' + filtered.length + ' remaining…</div>';
-    } else {
-      resultsEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">Scoring stocks with Groq AI…</div>';
-    }
+    const skipMsg = skippedCount > 0 ? 'Skipping ' + skippedCount + ' already-tracked — scoring ' + filtered.length + ' stock(s)…' : 'Scoring ' + queue.length + ' stock(s) with Groq AI…';
+    showLoader('Scanning…', skipMsg);
   } else {
-    resultsEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">Scoring stocks with Groq AI…</div>';
+    showLoader('Scanning…', 'Scoring ' + queue.length + ' stock(s) with Groq AI…');
   }
+  resultsEl.innerHTML = '';
+
+  let firstResult = true;
   const concurrency = _settings.concurrency || 3;
   let i = 0;
   async function next() {
     if (i >= queue.length) return;
     const name = queue[i++];
+    // Update loader text to show current stock
+    const loaderSub = document.getElementById('loader-subtext');
+    if (loaderSub) loaderSub.textContent = 'Analysing ' + name + '… (' + Math.min(i, queue.length) + '/' + queue.length + ')';
     try {
       const result = await scoreStock(name);
       scanResults.push(result);
       if (_settings.autoWatchlist && result.verdict === 'BUY') addToWatchlist(result);
-      renderScanResults();
     } catch (e) {
       scanResults.push({ name, error: e.message, totalScore: 0, verdict: 'ERROR' });
-      renderScanResults();
     }
+    if (firstResult) { firstResult = false; hideLoader(); }
+    renderScanResults();
     await next();
   }
   const workers = Array.from({ length: Math.min(concurrency, queue.length) }, () => next());
   await Promise.all(workers);
+  hideLoader();
   btn.disabled = false;
   btn.innerHTML = 'Scan &#9654;';
 }
