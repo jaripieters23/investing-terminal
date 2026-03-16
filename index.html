@@ -2997,6 +2997,46 @@ function closeTargetModal() {
   _targetModalSubmitFn = null;
 }
 
+// ── Cross-sync: holdings ↔ watchlist ─────────────────────────────────────────
+// When a low target is saved in holdings, sync to matching watchlist entry
+function _syncHoldingTargetToWatchlist(key, low, updatedAt) {
+  if (!low) return;
+  // key is ISIN or product name — match watchlist by ticker or name fragment
+  const wlIdx = watchlist.findIndex(w =>
+    (w.ticker && w.ticker === key) ||
+    w.name.toLowerCase() === key.toLowerCase() ||
+    (portfolioRows && portfolioRows.some(r =>
+      (r.isin === key || r.product === key) &&
+      (w.name.toLowerCase().includes(r.product.split(' ')[0].toLowerCase()) ||
+       w.ticker === r.ticker)
+    ))
+  );
+  if (wlIdx >= 0) {
+    watchlist[wlIdx].manualTargetLow = low;
+    watchlist[wlIdx].manualTargetUpdatedAt = updatedAt;
+    saveWatchlist();
+    console.log('[Sync] holding target → watchlist:', watchlist[wlIdx].name, low);
+  }
+}
+
+// When a low target is saved in watchlist, sync to matching holding
+function _syncWatchlistTargetToHolding(wlItem, low, updatedAt) {
+  if (!low || !portfolioRows) return;
+  const match = portfolioRows.find(r =>
+    (r.cls === 'Stock' || r.cls === 'REIT') && (
+      (r.ticker && r.ticker === wlItem.ticker) ||
+      r.product.toLowerCase().includes((wlItem.name || '').split(' ')[0].toLowerCase()) ||
+      (wlItem.name || '').toLowerCase().includes(r.product.split(' ')[0].toLowerCase())
+    )
+  );
+  if (match) {
+    const key = match.isin || match.product;
+    _holdingTargets[key] = { low, updatedAt };
+    saveHoldingTargets();
+    console.log('[Sync] watchlist target → holding:', match.product, low);
+  }
+}
+
 function submitTargetModal() {
   const name = _targetModalName;
   if (!name) return;
@@ -3007,25 +3047,27 @@ function submitTargetModal() {
   const low   = parseFloat(document.getElementById('tmod-low')?.value)   || null;
   const mean  = parseFloat(document.getElementById('tmod-mean')?.value)  || null;
   const high  = parseFloat(document.getElementById('tmod-high')?.value)  || null;
+  const updatedAt = new Date().toISOString();
 
   const s = watchlist[idx];
-  s.manualPrice        = price;
-  s.manualTargetLow    = low;
-  s.manualTargetMean   = mean;
-  s.manualTargetHigh   = high;
-  s.manualTargetUpdatedAt = new Date().toISOString();
+  s.manualPrice           = price;
+  s.manualTargetLow       = low;
+  s.manualTargetMean      = mean;
+  s.manualTargetHigh      = high;
+  s.manualTargetUpdatedAt = updatedAt;
 
-  // Update displayed price if manually set
   if (price) s.currentPrice = price;
 
-  // Recompute verdict
-  const effectiveMean = mean ?? s.targetMean;
-  const effectiveLow  = low  ?? s.targetLow;
+  const effectiveMean  = mean ?? s.targetMean;
+  const effectiveLow   = low  ?? s.targetLow;
   const effectivePrice = price ?? s.currentPrice;
   if (effectivePrice && (effectiveLow || effectiveMean)) {
     s.verdict = effectivePrice < (effectiveLow ?? effectiveMean) ? 'BUY'
               : effectivePrice < effectiveMean ? 'WATCH' : 'PASS';
   }
+
+  // Sync low target to matching holding
+  if (low) _syncWatchlistTargetToHolding(s, low, updatedAt);
 
   saveWatchlist();
   renderWatchlistTable();
@@ -3104,8 +3146,11 @@ function openHoldingTargetModal(key, name, sym) {
 function submitHoldingTargetModal(key) {
   const low = parseFloat(document.getElementById('htmod-low')?.value) || null;
   if (!low) { closeTargetModal(); return; }
-  _holdingTargets[key] = { low, updatedAt: new Date().toISOString() };
+  const updatedAt = new Date().toISOString();
+  _holdingTargets[key] = { low, updatedAt };
   saveHoldingTargets();
+  // Sync to matching watchlist entry
+  _syncHoldingTargetToWatchlist(key, low, updatedAt);
   renderHoldingsPage(window._currentHoldingsKey || 'all');
   closeTargetModal();
 }
