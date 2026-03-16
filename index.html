@@ -1937,10 +1937,9 @@ function holdingsTableHTML(rows, total) {
   return `<div class="table-scroll"><table><thead><tr><th>Name</th><th class="right">Value</th><th class="right">Weight</th><th class="right">Qty</th><th class="right">Price</th>${hasStocks ? '<th class="right" title="Low price target">Low Target</th><th class="right" title="Upside/downside to low target">Upside</th>' : ''}</tr></thead><tbody>
   ${rows.map(r => {
     const w = r.valueEUR / total * 100;
-    const canClick = r.cls === 'Stock';
+    const canClick = r.cls === 'Stock' || r.cls === 'REIT';
     const shortName = r.product.split(' ').slice(0, 4).join(' ');
-    const sym2 = r._currency === 'USD' ? '$' : r._currency === 'GBP' ? '\u00a3' : '\u20ac';
-    const hasUpside = r.cls === 'Stock' || r.cls === 'REIT';
+    const sym2 = r._currency === 'USD' ? '$' : r._currency === 'GBP' ? '£' : '€';
     const key = r.isin || r.product;
     const manual = canClick ? (_holdingTargets[key] || null) : null;
     const effectiveLow = manual?.low ?? r._targetLow ?? null;
@@ -1949,26 +1948,24 @@ function holdingsTableHTML(rows, total) {
     let targetCell = '';
     if (hasStocks) {
       if (!canClick) {
-        targetCell = '<td class="right">\u2014</td>';
+        targetCell = '<td class="right">—</td><td class="right">—</td>';
       } else {
         const tColor = isStale ? 'var(--red)' : 'var(--green)';
         const valStr = effectiveLow != null
           ? `<span style="color:${tColor};font-weight:600">${sym2}${effectiveLow.toFixed(2)}</span>`
-          : `<span style="color:var(--text-3);font-size:10px">\u2014</span>`;
+          : `<span style="color:var(--text-3);font-size:10px">—</span>`;
         const badge = isManual
-          ? `<span class="wl-target-info" data-tip="${isStale ? '\u26a0 Outdated \u00b7 ' : ''}Manual \u00b7 ${new Date(manual.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}" style="background:${isStale ? 'rgba(239,68,68,.15)' : 'rgba(79,124,247,.15)'};color:${isStale ? 'var(--red)' : 'var(--blue)'}">i</span>`
+          ? `<span class="wl-target-info" data-tip="${isStale ? '⚠ Outdated · ' : ''}Manual · ${new Date(manual.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}" style="background:${isStale ? 'rgba(239,68,68,.15)' : 'rgba(79,124,247,.15)'};color:${isStale ? 'var(--red)' : 'var(--blue)'}">i</span>`
           : '';
-        const safeKey = key.replace(/"/g,'&quot;');
-        // Upside calculation
+        const safeKey  = key.replace(/"/g,'&quot;');
+        const safeName = shortName.replace(/"/g,'&quot;');
+        const safeSym  = sym2.replace(/"/g,'&quot;');
         const upside = effectiveLow != null && r.price && r.price > 0
-          ? ((effectiveLow - r.price) / r.price * 100)
-          : null;
+          ? ((effectiveLow - r.price) / r.price * 100) : null;
         const upsideStr = upside != null
           ? `<span style="font-weight:600;color:${upside >= 0 ? 'var(--green)' : 'var(--red)'};font-size:12px">${upside >= 0 ? '+' : ''}${upside.toFixed(1)}%</span>`
           : `<span style="color:var(--text-3);font-size:10px">—</span>`;
-        const safeName = shortName.replace(/"/g,'&quot;');
-        const safeSym = sym2.replace(/"/g,'&quot;');
-        targetCell = `<td class="right holding-num" style="white-space:nowrap"><div style="display:inline-flex;align-items:center;gap:4px">${valStr}${badge}<button class="wl-edit-target-btn" style="padding:1px 5px;font-size:9px" data-key="${safeKey}" data-name="${safeName}" data-sym="${safeSym}" onclick="openHoldingTargetModal(this.dataset.key,this.dataset.name,this.dataset.sym)">\u270f</button></div></td>`;
+        targetCell = `<td class="right holding-num" style="white-space:nowrap"><div style="display:inline-flex;align-items:center;gap:4px">${valStr}${badge}<button class="wl-edit-target-btn" style="padding:1px 5px;font-size:9px" data-key="${safeKey}" data-name="${safeName}" data-sym="${safeSym}" onclick="openHoldingTargetModal(this.dataset.key,this.dataset.name,this.dataset.sym)">✏</button></div></td><td class="right holding-num">${upsideStr}</td>`;
       }
     }
     return `<tr><td><div class="holding-name ${canClick ? 'stock-link' : ''}" title="${r.product}" ${canClick ? `onclick="showStockDetail('${shortName.replace(/'/g,"\\'")}','dashboard')"` : ''}>${r.product}</div><div class="holding-isin">${r.isin || '\u2014'}</div></td>
