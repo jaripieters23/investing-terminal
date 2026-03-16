@@ -4278,13 +4278,9 @@ function renderStockDetail(d) {
 
     return `<div class="stock-detail-card full">
       <div class="stock-card-title">Qualitative Analysis</div>
-      <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-top:10px">
-        ${radarSVG ? `<div style="display:flex;justify-content:center;align-items:center;padding:10px 0">${radarSVG}</div>` : ''}
-        <div style="flex:1;min-width:200px">
-          <div class="quality-scores-grid">${rows}</div>
-          ${d.qualScore != null ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">Qualitative score: <strong style="color:var(--text)">${d.qualScore}/100</strong></div>` : ''}
-        </div>
-      </div>
+      ${radarSVG ? `<div style="display:flex;justify-content:center;padding:16px 0 8px">${radarSVG}</div>` : ''}
+      <div class="quality-scores-grid" style="margin-top:8px">${rows}</div>
+      ${d.qualScore != null ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-3)">Qualitative score: <strong style="color:var(--text)">${d.qualScore}/100</strong></div>` : ''}
     </div>`;
   })() : '';
 
