@@ -1434,29 +1434,59 @@ function classifyHolding(name, isin) {
   const n = name.toUpperCase();
   if (n.includes('CASH') || n.startsWith('EUR') || n.startsWith('USD') || n.startsWith('GBP') || isin.startsWith('XX')) return 'Cash';
 
-  // Known REIT ISINs (hard override)
-  const REIT_ISINS = new Set(['US9256521090','US74460D1090','US8952131033','BE0974349814','BE0003875187','FR0000124711','NL0006294274']);
-  if (REIT_ISINS.has(isin)) return 'REIT';
-
-  // Known Emerging Markets stocks (hard override by ISIN)
-  const EM_ISINS = new Set(['US01609W1027','KYG017191142','US38141G1040','CNE1000002H1','HK0000049939']);
-  if (EM_ISINS.has(isin)) return 'EM';
+  // ── Hard ISIN overrides — most reliable, always wins ────────────────────
+  const ISIN_MAP = {
+    // Stocks (developed market equity ETFs)
+    'IE00B4L5Y983': 'Stock',  // iShares Core MSCI World UCITS ETF
+    'IE00B3RBWM25': 'Stock',  // Vanguard FTSE All-World
+    'IE00B4X9L533': 'Stock',  // iShares Core MSCI World Quality Factor
+    'IE00BD45X963': 'Stock',  // iShares Edge MSCI World Quality Factor UCITS ETF
+    'IE00BJ0KDQ92': 'Stock',  // iShares Core MSCI World (acc)
+    // REITs (property ETFs)
+    'IE00B1FZS350': 'REIT',   // iShares Developed Markets Property Yield UCITS ETF
+    'IE00B1FZS244': 'REIT',   // iShares Global Property Securities
+    'IE00B5BFJG71': 'REIT',   // iShares Asia Property Yield
+    // Bonds
+    'IE00B3F81409': 'Bond',   // iShares Global Govt Bond UCITS ETF
+    'IE00B3F81R35': 'Bond',   // iShares Global Govt Bond (Hedged)
+    'IE00B6X2VY59': 'Bond',   // iShares Global Corp Bond UCITS ETF
+    'IE00BF3N7005': 'Bond',   // State Street SPDR Bloomberg Euro Corp Bond UCITS ETF
+    'IE00B41RYL63': 'Bond',   // SPDR Bloomberg Barclays Euro Corp Bond
+    'LU0290358497': 'Bond',   // Xtrackers EUR Corp Bond
+    // Emerging Markets
+    'IE00B0M63177': 'EM',     // iShares MSCI EM UCITS ETF (Acc)
+    'IE00B4L5YC18': 'EM',     // iShares Core MSCI EM IMI UCITS ETF
+    'IE00BKM4GZ66': 'EM',     // iShares Core MSCI EM IMI UCITS ETF (acc)
+    'IE00B52SF786': 'EM',     // iShares MSCI EM UCITS ETF (Dist)
+    // Known REIT stocks
+    'US9256521090': 'REIT', 'US74460D1090': 'REIT', 'US8952131033': 'REIT',
+    'BE0974349814': 'REIT', 'BE0003875187': 'REIT', 'FR0000124711': 'REIT', 'NL0006294274': 'REIT',
+    // Known EM stocks
+    'US01609W1027': 'EM', 'KYG017191142': 'EM', 'US38141G1040': 'EM',
+    'CNE1000002H1': 'EM', 'HK0000049939': 'EM',
+  };
+  if (ISIN_MAP[isin]) return ISIN_MAP[isin];
 
   // ── Bond ETFs & bonds ────────────────────────────────────────────────────
+  // Check bonds BEFORE any stock-provider keywords (SPDR, Bloomberg etc. can appear in bond names)
   if (n.includes('BOND') || n.includes('OBLIGATIE') || n.includes('GILT') || n.includes('TREASURY')
-    || n.includes('CORPORATE') || n.includes('AGGREGATE') || n.includes('SOVEREIGN')
-    || n.includes('CREDIT') || n.includes('HIGH YIELD') || n.includes('INFLATION')
-    || n.includes('DURATION') || n.includes('FIXED INCOME')) {
+    || n.includes('CORPORATE BOND') || n.includes('AGGREGATE') || n.includes('SOVEREIGN')
+    || n.includes('CREDIT BOND') || n.includes('HIGH YIELD BOND') || n.includes('INFLATION BOND')
+    || n.includes('DURATION') || n.includes('FIXED INCOME') || n.includes('GOVT BOND')
+    || n.includes('GOV BOND') || n.includes('GOVERNMENT BOND') || n.includes('EURO BOND')
+    || n.includes('GLOBAL BOND') || n.includes('INFLATION LINK')) {
     return 'Bond';
   }
 
   // ── REIT / Property ETFs ─────────────────────────────────────────────────
+  // Check property BEFORE the generic MSCI/FTSE stock block
   if (n.includes('REIT') || n.includes('VASTGOED') || n.includes('REAL ESTATE')
-    || n.includes('PROPERTY') || n.includes('LISTED PROP')
+    || n.includes('PROPERTY YIELD') || n.includes('PROPERTY ETF') || n.includes('LISTED PROP')
+    || n.includes('DEVELOPED MARKETS PROPERTY') || n.includes('DEVELOPED MARKET PROPERTY')
+    || n.includes('GLOBAL PROPERTY') || n.includes('ASIA PROPERTY') || n.includes('FTSE EPRA')
     || n.includes('WDP') || n.includes('AEDIFICA') || n.includes('VICI')
     || n.includes('PUBLIC STOR') || n.includes('SHURGARD')
-    || n.includes('UNIBAIL') || n.includes('KLEPIERRE') || n.includes('VONOVIA')
-    || n.includes('DEVELOPED MARKET PROPERT') || n.includes('FTSE EPRA')) {
+    || n.includes('UNIBAIL') || n.includes('KLEPIERRE') || n.includes('VONOVIA')) {
     return 'REIT';
   }
 
@@ -1464,30 +1494,30 @@ function classifyHolding(name, isin) {
   if (n.includes('ALIBABA') || n.includes('BABA') || n.includes('TENCENT') || n.includes('JD.COM')
     || n.includes('MEITUAN') || n.includes('PINDUODUO') || n.includes('BAIDU')
     || n.includes('NIO ') || n.includes('XPG') || n.includes('PROSUS') || n.includes('NASPERS')
-    // EM ETFs — explicit keywords first
     || n.includes('EMERGING MARKET') || n.includes('EMERGING MKT')
-    || n.includes('MSCI EM') || n.includes('MSCI EMERGING')
+    || n.includes('MSCI EM') || n.includes('MSCI EMERGING') || n.includes('MSCI EM UCITS')
+    || n.includes('CORE MSCI EM') || n.includes('EM IMI') || n.includes('EM UCITS')
     || n.includes('FTSE EM') || n.includes('FTSE EMERGING')
-    || n.includes('CHINA') || n.includes('INDIA') || n.includes('BRAZIL')
-    || n.includes('VIETNAM') || n.includes('INDONESIA') || n.includes('KOREA ETF')
-    || n.includes('ASIA PACIFIC') || n.includes('ASIA EX')
-    || n.includes('EM IMI') || n.includes('EM UCITS')
-    // ISIN country codes for EM-domiciled securities
+    || n.includes('CHINA ETF') || n.includes('INDIA ETF') || n.includes('BRAZIL ETF')
+    || n.includes('VIETNAM') || n.includes('INDONESIA ETF') || n.includes('KOREA ETF')
+    || n.includes('ASIA PACIFIC ETF') || n.includes('ASIA EX-JAPAN')
     || ['CN','HK','KR','TW','IN','BR','MX','ZA','RU','TH','MY','ID','PH','VN'].includes(isin.slice(0,2))) {
     return 'EM';
   }
 
-  // ── Developed market equity (all ETFs route here) ────────────────────────
-  // This catches broad market ETFs: MSCI World, S&P500, NASDAQ, STOXX, etc.
-  if (n.includes('ETF') || n.includes('INDEX') || n.includes('TRACKER')
-    || n.includes('MSCI') || n.includes('FTSE') || n.includes('STOXX')
+  // ── Developed market equity — catch-all for ETFs and stocks ─────────────
+  if (n.includes('ETF') || n.includes('INDEX FUND') || n.includes('TRACKER')
+    || n.includes('MSCI WORLD') || n.includes('MSCI EUROPE') || n.includes('MSCI USA')
+    || n.includes('FTSE ALL') || n.includes('FTSE WORLD') || n.includes('FTSE 100')
+    || n.includes('STOXX') || n.includes('S&P 500') || n.includes('S&P500') || n.includes('NASDAQ')
+    || n.includes('QUALITY FACTOR') || n.includes('MINIMUM VOLATILITY') || n.includes('MOMENTUM FACTOR')
     || n.includes('VANGUARD') || n.includes('ISHARES') || n.includes('XTRACKERS')
     || n.includes('LYXOR') || n.includes('AMUNDI') || n.includes('INVESCO')
-    || n.includes('SPDR') || n.includes('BLOOMBERG') || n.includes('WISDOMTREE')
-    || n.includes('VANECK') || n.includes('DWS') || n.includes('BLACKROCK')
-    || n.includes('STATESTREET') || n.includes('DIMENSIONAL')
-    || (isin.startsWith('IE') && (n.includes('WORLD') || n.includes('GLOBAL')
-        || n.includes('CORE') || n.includes('S&P') || n.includes('NASDAQ')))) {
+    || n.includes('WISDOMTREE') || n.includes('VANECK') || n.includes('DWS')
+    || n.includes('BLACKROCK') || n.includes('STATESTREET') || n.includes('STATE STREET')
+    || n.includes('DIMENSIONAL') || n.includes('NORTHERN TRUST')
+    || (isin.startsWith('IE') && (n.includes('WORLD') || n.includes('GLOBAL EQUITY')
+        || n.includes('CORE') || n.includes('ALL WORLD')))) {
     return 'Stock';
   }
 
