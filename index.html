@@ -1452,7 +1452,9 @@ function classifyHolding(name, isin) {
     'IE00B3F81R35': 'Bond',   // iShares Global Govt Bond (Hedged)
     'IE00B6X2VY59': 'Bond',   // iShares Global Corp Bond UCITS ETF
     'IE00BF3N7005': 'Bond',   // State Street SPDR Bloomberg Euro Corp Bond UCITS ETF
+    'IE00B3T9LM79': 'Bond',   // SPDR Bloomberg Euro Corporate Bond UCITS ETF (alt ISIN)
     'IE00B41RYL63': 'Bond',   // SPDR Bloomberg Barclays Euro Corp Bond
+    'IE00BCBJG560': 'Bond',   // SPDR Bloomberg Euro Corporate Bond (acc)
     'LU0290358497': 'Bond',   // Xtrackers EUR Corp Bond
     // Emerging Markets
     'IE00B0M63177': 'EM',     // iShares MSCI EM UCITS ETF (Acc)
@@ -1470,14 +1472,17 @@ function classifyHolding(name, isin) {
 
   // ── Bond ETFs & bonds ────────────────────────────────────────────────────
   // Check bonds BEFORE any stock-provider keywords (SPDR, Bloomberg etc. can appear in bond names)
-  if (n.includes('BOND') || n.includes('OBLIGATIE') || n.includes('GILT') || n.includes('TREASURY')
-    || n.includes('CORPORATE BOND') || n.includes('AGGREGATE') || n.includes('SOVEREIGN')
-    || n.includes('CREDIT BOND') || n.includes('HIGH YIELD BOND') || n.includes('INFLATION BOND')
-    || n.includes('DURATION') || n.includes('FIXED INCOME') || n.includes('GOVT BOND')
-    || n.includes('GOV BOND') || n.includes('GOVERNMENT BOND') || n.includes('EURO BOND')
-    || n.includes('GLOBAL BOND') || n.includes('INFLATION LINK')) {
-    return 'Bond';
-  }
+  const isBond = n.includes('BOND') || n.includes('OBLIGATIE') || n.includes('GILT')
+    || n.includes('TREASURY') || n.includes('CORPORATE BOND') || n.includes('AGGREGATE')
+    || n.includes('SOVEREIGN') || n.includes('CREDIT BOND') || n.includes('HIGH YIELD BOND')
+    || n.includes('INFLATION BOND') || n.includes('DURATION') || n.includes('FIXED INCOME')
+    || n.includes('GOVT BOND') || n.includes('GOV BOND') || n.includes('GOVERNMENT BOND')
+    || n.includes('EURO BOND') || n.includes('GLOBAL BOND') || n.includes('INFLATION LINK')
+    // Catch "BLOOMBERG ... CORPORATE" or "BLOOMBERG ... BOND" combos (SPDR Bloomberg funds)
+    || (n.includes('BLOOMBERG') && (n.includes('CORPORATE') || n.includes('CREDIT') || n.includes('AGGREGATE') || n.includes('GILT')))
+    || (n.includes('SPDR') && n.includes('BOND'))
+    || (n.includes('BARCLAYS') && n.includes('BOND'));
+  if (isBond) return 'Bond';
 
   // ── REIT / Property ETFs ─────────────────────────────────────────────────
   // Check property BEFORE the generic MSCI/FTSE stock block
