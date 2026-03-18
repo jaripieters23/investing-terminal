@@ -15,15 +15,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-:root{--bg:#0d0f14;--card:#161a23;--card-hover:#1c2130;--border:#252b3b;--text:#e8eaf0;--text-2:#9ba3b8;--text-3:#5a607a;--blue:#4f7cf7;--green:#22c55e;--red:#ef4444;--amber:#f59e0b;--sidebar-w:220px;--header-h:52px}
+:root{--bg:#0d0f14;--card:#161a23;--card-hover:#1c2130;--border:#252b3b;--text:#e8eaf0;--text-2:#9ba3b8;--text-3:#5a607a;--blue:#4f7cf7;--green:#22c55e;--red:#ef4444;--amber:#f59e0b;--sidebar-w:220px;--header-h:52px;--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);--topbar-h:calc(var(--header-h) + var(--safe-top))}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-size:14px}
 html{overflow-x:hidden;max-width:100vw}body{display:flex;flex-direction:column;overflow:hidden;overflow-x:hidden;max-width:100vw}
-.app-shell{display:flex;flex:1;overflow:hidden;padding-top:var(--header-h)}
-.sidebar{width:var(--sidebar-w);background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:none;position:fixed;top:var(--header-h);left:0;bottom:0;z-index:30}
+.app-shell{display:flex;flex:1;overflow:hidden;padding-top:var(--topbar-h)}
+.sidebar{width:var(--sidebar-w);background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:none;position:fixed;top:var(--topbar-h);left:0;bottom:0;z-index:30}
 .sidebar::-webkit-scrollbar{display:none}
 .main{flex:1;margin-left:var(--sidebar-w);display:flex;flex-direction:column;overflow:hidden}
-.topbar{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px 0 calc(var(--sidebar-w) + 16px);gap:10px;z-index:40}
+.topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar-h);background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:flex-end;padding:0 16px calc(8px) calc(var(--sidebar-w) + 16px);padding-top:var(--safe-top);gap:10px;z-index:40}
 .topbar-title{font-size:14px;font-weight:600;color:var(--text);flex:1}
 .topbar-badge{font-size:11px;color:var(--text-3);background:var(--card);border:1px solid var(--border);padding:2px 8px;border-radius:5px;white-space:nowrap}
 .topbar-badge.green{color:var(--green);border-color:rgba(34,197,94,.25);background:rgba(34,197,94,.08)}
@@ -52,9 +52,9 @@ html{overflow-x:hidden;max-width:100vw}body{display:flex;flex-direction:column;o
 .sidebar-upload-btn:hover{opacity:.88}
 .sidebar-upload-btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text-2)}
 .sidebar-upload-btn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
-#dashboard{display:none;flex:1;padding:calc(var(--header-h) + 20px) 28px 40px;overflow-y:auto;background:var(--bg)}
+#dashboard{display:none;flex:1;padding:calc(var(--topbar-h) + 20px) 28px 40px;overflow-y:auto;background:var(--bg)}
 #dashboard-inner{max-width:1400px;margin:0 auto}
-#holdings-page{padding:calc(var(--header-h) + 20px) 24px 40px;min-height:unset}
+#holdings-page{padding:calc(var(--topbar-h) + 20px) 24px 40px;min-height:unset}
 .hcat-inner{max-width:1100px;margin:0 auto}
 .hcat-header{margin-bottom:18px}
 .hcat-title{font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px}
@@ -67,15 +67,15 @@ html{overflow-x:hidden;max-width:100vw}body{display:flex;flex-direction:column;o
 .hcat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .hcat-card-title{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.07em;padding:14px 18px;border-bottom:1px solid var(--border)}
 @media(max-width:760px){
-  #holdings-page{padding:calc(var(--header-h) + 14px) 14px calc(70px + env(safe-area-inset-bottom,0px))}
+  #holdings-page{padding:calc(var(--topbar-h) + 14px) 14px calc(70px + env(safe-area-inset-bottom,0px))}
   .hcat-kpis{grid-template-columns:1fr 1fr}
   .hcat-kpi-value{font-size:15px}
 }
-#scan-page,#watchlist-page,#settings-page,#holdings-page{display:none;flex:1;overflow-y:auto;background:var(--bg);padding-top:calc(var(--header-h) + 8px)}
-#holdings-page{padding:calc(var(--header-h) + 20px) 24px 40px}
+#scan-page,#watchlist-page,#settings-page,#holdings-page{display:none;flex:1;overflow-y:auto;background:var(--bg);padding-top:calc(var(--topbar-h) + 8px)}
+#holdings-page{padding:calc(var(--topbar-h) + 20px) 24px 40px}
 #stock-page{display:none;flex:1;overflow-y:auto;background:var(--bg)}
 #pnl-page{display:none;flex:1;overflow-y:auto;background:var(--bg)}
-#news-page{display:none;flex-direction:column;background:var(--bg);height:calc(100vh - var(--header-h));box-sizing:border-box}
+#news-page{display:none;flex-direction:column;background:var(--bg);height:calc(100vh - var(--topbar-h));box-sizing:border-box}
 #news-page .news-scroll{scrollbar-width:none}
 #news-page .news-scroll::-webkit-scrollbar{display:none}
 #upload-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;flex:1;gap:16px}
@@ -274,6 +274,7 @@ td{padding:8px 16px;vertical-align:middle}
 .wl-remove-btn:hover{border-color:var(--red);color:var(--red)}
 .wl-edit-target-btn{padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text-3);font-size:10px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
 .wl-edit-target-btn:hover{border-color:var(--blue);color:var(--blue)}
+.wl-mobile-sub{display:none}
 .wl-target-info{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(79,124,247,.15);color:var(--blue);font-size:9px;font-weight:700;cursor:default;position:relative;margin-left:4px;vertical-align:middle}
 .wl-target-info:hover::after{content:attr(data-tip);position:absolute;right:0;top:18px;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:10px;color:var(--text-2);white-space:nowrap;z-index:100;pointer-events:none;font-weight:400;line-height:1.5}
 .wl-target-row td{padding:0 !important}
@@ -433,14 +434,16 @@ input,textarea,select{font-size:16px!important}
 .hamburger{display:flex}
 .mobile-overlay.show{display:block}
 .mobile-bottom-nav{display:flex}
-html{scroll-padding-top:var(--header-h)}
-#dashboard{padding:calc(var(--header-h) + 14px) 14px calc(70px + env(safe-area-inset-bottom,0px));min-height:100vh;background:var(--bg)}
-#scan-page,#watchlist-page,#settings-page,#pnl-page{padding-top:calc(var(--header-h) + 8px);padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}
-#news-page{padding-bottom:0;height:calc(100vh - var(--header-h) - 60px - env(safe-area-inset-bottom,0px));box-sizing:border-box}
+html{scroll-padding-top:var(--topbar-h)}
+#dashboard{padding:calc(var(--topbar-h) + 14px) 14px calc(70px + env(safe-area-inset-bottom,0px));min-height:100vh;background:var(--bg)}
+#scan-page,#watchlist-page,#settings-page,#pnl-page{padding-top:calc(var(--topbar-h) + 8px);padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}
+#news-page{padding-bottom:0;height:calc(100vh - var(--topbar-h) - 60px - env(safe-area-inset-bottom,0px));box-sizing:border-box}
   #upload-screen{padding-bottom:calc(80px + env(safe-area-inset-bottom,0px))}
 .scan-header{padding:8px 14px 0}.scan-controls{margin:12px 14px 0;grid-template-columns:1fr auto}.scan-btn.secondary{grid-column:1/-1}
 #scan-queue{margin:10px 14px 0}#scan-results{padding:12px 14px 80px}
 .watchlist-header{padding:8px 14px 0}.wl-table-wrap{margin:12px 14px 80px}
+.wl-hide-mobile{display:none!important}
+.wl-mobile-sub{display:block;font-size:9px;color:var(--text-3);margin-top:1px}
 .stock-detail-topbar{padding:0 12px}.stock-detail-body{padding:14px}
 .stock-detail-grid{grid-template-columns:1fr}.stock-detail-card.full{grid-column:1}
 .kpi-grid{grid-template-columns:1fr 1fr}.kpi-value{font-size:16px}
@@ -608,7 +611,7 @@ html{scroll-padding-top:var(--header-h)}
     </div>
   </div>
   <div class="wl-table-wrap"><table>
-    <thead><tr><th onclick="sortWatchlist('name')">Company &#x21C5;</th><th class="right" onclick="sortWatchlist('score')">Score &#x21C5;</th><th class="right">Verdict</th><th class="right" onclick="sortWatchlist('price')">Price &#x21C5;</th><th class="right">Low target</th><th class="right" onclick="sortWatchlist('upside')">Upside &#x21C5;</th><th class="right"></th></tr></thead>
+    <thead><tr><th onclick="sortWatchlist('name')">Company &#x21C5;</th><th class="right wl-hide-mobile" onclick="sortWatchlist('score')">Score &#x21C5;</th><th class="right wl-hide-mobile">Verdict</th><th class="right wl-hide-mobile" onclick="sortWatchlist('price')">Price &#x21C5;</th><th class="right">Low target</th><th class="right" onclick="sortWatchlist('upside')">Upside &#x21C5;</th><th class="right"></th></tr></thead>
     <tbody id="watchlist-body"></tbody>
   </table></div>
   <div id="watchlist-empty" style="display:none;padding:60px 24px;text-align:center;color:var(--text-3);font-size:13px">No stocks in your Investable Universe yet. Use Stock Scan to find and add stocks.</div>
@@ -688,6 +691,23 @@ html{scroll-padding-top:var(--header-h)}
       <div class="settings-section-header"><div class="settings-section-title">Display</div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>Home currency</strong><span>Used for portfolio totals.</span></div><div class="settings-row-control"><select class="settings-select" id="setting-currency"><option value="EUR">EUR &euro;</option><option value="USD">USD $</option><option value="GBP">GBP &pound;</option><option value="CHF">CHF</option><option value="SEK">SEK</option><option value="NOK">NOK</option><option value="DKK">DKK</option></select></div></div>
       <div class="settings-row"><div class="settings-row-label"><strong>Privacy mode</strong><span>Blur all personal amounts &mdash; values, quantities, prices and the performance chart. Hover any blurred number to reveal it temporarily.</span></div><div class="settings-row-control"><label class="settings-toggle"><input type="checkbox" id="setting-privacy-mode"><div class="settings-toggle-track"></div><div class="settings-toggle-thumb"></div></label></div></div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <div class="settings-section-title">Allocation Targets</div>
+        <div class="settings-section-sub">Set your target allocation per asset class. Cash is excluded — percentages are of investable assets only. Total must add up to 100%.</div>
+      </div>
+      <div id="alloc-target-settings"></div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <strong>Total</strong>
+          <span id="alloc-target-total-msg" style="color:var(--text-3)">Must equal 100%</span>
+        </div>
+        <div class="settings-row-control">
+          <span id="alloc-target-total" style="font-size:16px;font-weight:700;color:var(--text)">100%</span>
+          <button class="settings-save-btn" onclick="saveAllocTargets()">Save</button>
+        </div>
+      </div>
     </div>
     <div class="settings-section">
       <div class="settings-section-header"><div class="settings-section-title">Data &amp; Cache</div></div>
@@ -1120,6 +1140,55 @@ function confirmClearWatchlist() {
   showSettingsToast('Watchlist cleared');
 }
 
+function renderAllocTargetSettings() {
+  const wrap = document.getElementById('alloc-target-settings');
+  if (!wrap) return;
+  const targets = getAllocTargets();
+  wrap.innerHTML = targets.map(t => `
+    <div class="settings-row">
+      <div class="settings-row-label"><strong>${t.icon} ${t.label}</strong></div>
+      <div class="settings-row-control">
+        <input type="number" min="0" max="100" step="1" value="${t.target}"
+          id="alloc-input-${t.key.replace(/\s/g,'_')}"
+          oninput="updateAllocTotal()"
+          style="width:72px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:5px 8px;font-family:Inter,sans-serif;text-align:right">
+        <span style="color:var(--text-3);font-size:13px">%</span>
+      </div>
+    </div>`).join('');
+  updateAllocTotal();
+}
+
+function updateAllocTotal() {
+  let sum = 0;
+  ALLOC_TARGET_DEFS.forEach(d => {
+    const el = document.getElementById('alloc-input-' + d.key.replace(/\s/g,'_'));
+    if (el) sum += +el.value || 0;
+  });
+  const totalEl = document.getElementById('alloc-target-total');
+  const msgEl   = document.getElementById('alloc-target-total-msg');
+  if (totalEl) { totalEl.textContent = sum + '%'; totalEl.style.color = sum === 100 ? 'var(--green)' : 'var(--red)'; }
+  if (msgEl)   { msgEl.textContent = sum === 100 ? '✓ Total is 100%' : 'Must equal 100% (currently ' + sum + '%)'; msgEl.style.color = sum === 100 ? 'var(--green)' : 'var(--amber)'; }
+}
+
+function saveAllocTargets() {
+  let sum = 0;
+  const saved = {};
+  ALLOC_TARGET_DEFS.forEach(d => {
+    const el = document.getElementById('alloc-input-' + d.key.replace(/\s/g,'_'));
+    const v = +el?.value || 0;
+    saved[d.key] = v;
+    sum += v;
+  });
+  if (sum !== 100) { showSettingsToast('Total must equal 100% (currently ' + sum + '%)'); return; }
+  _settings.allocTargets = saved;
+  saveSettings();
+  if (portfolioRows) {
+    const total = portfolioRows.reduce((s,r) => s + r.valueEUR, 0);
+    renderAllocTable(portfolioRows, total);
+  }
+  showSettingsToast('Allocation targets saved');
+}
+
 function refreshSettingsUI() {
   // Update file upload labels in settings
   const portLabel = document.getElementById('settings-port-label');
@@ -1128,6 +1197,9 @@ function refreshSettingsUI() {
   if (portLabel) portLabel.textContent = portfolioRows ? '✓ Loaded (' + portfolioRows.length + ' holdings)' : '↑ Upload';
   if (txLabel)   txLabel.textContent   = txRows   ? '✓ Loaded (' + txRows.length + ' trades)' : '↑ Upload';
   if (acctLabel) acctLabel.textContent = acctRows  ? '✓ Loaded (' + acctRows.length + ' entries)' : '↑ Upload';
+
+  // Allocation targets
+  renderAllocTargetSettings();
 
   // Never pre-fill inputs with masked keys — just update placeholders to show saved status
   // No key inputs — keys live in Cloudflare Workers
@@ -1551,14 +1623,22 @@ function geoGroupBy(rows) {
 // DASHBOARD RENDERING
 // ═══════════════════════════════════════════════════════════════
 // ── Allocation target table ──────────────────────────────────────────────────
-const ALLOC_TARGETS = [
-  { key:'Stocks',           icon:'📈', target:45, label:'Stocks'           },
-  { key:'Emerging Markets', icon:'🌏', target:5,  label:'Emerging Markets' },
-  { key:'Bonds',            icon:'📄', target:15, label:'Bonds'            },
-  { key:'REITs',            icon:'🏢', target:15, label:'REITs'            },
-  { key:'Other',            icon:'🌍', target:10, label:'Other'            },
-  { key:'Cash',             icon:'💶', target:10, label:'Cash'             },
+const ALLOC_TARGET_DEFS = [
+  { key:'Stocks',           icon:'📈', label:'Stocks'           },
+  { key:'Emerging Markets', icon:'🌏', label:'Emerging Markets' },
+  { key:'Bonds',            icon:'📄', label:'Bonds'            },
+  { key:'REITs',            icon:'🏢', label:'REITs'            },
+  { key:'Other',            icon:'🌍', label:'Other'            },
 ];
+const ALLOC_TARGET_DEFAULTS = { Stocks:45, 'Emerging Markets':5, Bonds:15, REITs:15, Other:20 };
+
+function getAllocTargets() {
+  const saved = _settings.allocTargets || {};
+  return ALLOC_TARGET_DEFS.map(d => ({ ...d, target: saved[d.key] ?? ALLOC_TARGET_DEFAULTS[d.key] }));
+}
+
+// Keep ALLOC_TARGETS as a getter alias for code that references it
+Object.defineProperty(window, 'ALLOC_TARGETS', { get: getAllocTargets });
 
 // Manual external investments: { Bonds: [{label, value},...], Other: [{label, value},...] }
 let _manualAlloc = (() => { try { return JSON.parse(localStorage.getItem('manualAlloc') || '{"Bonds":[],"Other":[]}'); } catch { return {"Bonds":[],"Other":[]}; } })();
@@ -1583,7 +1663,6 @@ function getAllocBuckets(rows) {
   (_manualAlloc.Other || []).forEach(e => { buckets.Other += +e.value || 0; });
   return buckets;
 }
-
 function addManualAllocEntry(key) {
   const label = document.getElementById('ma-label-' + key)?.value?.trim();
   const value = parseFloat(document.getElementById('ma-value-' + key)?.value);
@@ -1609,9 +1688,11 @@ function renderAllocTable(rows, total) {
   const sym      = _settings.currency === 'USD' ? '$' : '€';
   const buckets  = getAllocBuckets(rows);
   const manualTotal = Object.values(_manualAlloc).flat().reduce((s,e) => s + (+e.value||0), 0);
-  const grandTotal  = total + manualTotal;
+  // Exclude cash from the base — allocations are % of investable assets only
+  const investableTotal = total - (buckets.Cash || 0) + manualTotal;
+  const grandTotal = investableTotal > 0 ? investableTotal : total + manualTotal;
 
-  const tableData = ALLOC_TARGETS.map(t => {
+  const tableData = getAllocTargets().map(t => {
     const val    = buckets[t.key] || 0;
     const actual = grandTotal > 0 ? val / grandTotal * 100 : 0;
     const diff   = actual - t.target;
@@ -2935,18 +3016,20 @@ function renderWatchlistTable() {
       : '<span class="wl-na">—</span>';
 
     return '<tr id="wl-row-' + nameEsc + '">'
-      + '<td class="wl-td"><div class="holding-name stock-link" onclick="showStockDetail(\'' + nameEsc + '\',\'watchlist\')">' + s.name + '</div>'
-      + '<div class="holding-isin">' + (s.ticker || '—') + '</div></td>'
-      + '<td class="right wl-td" style="font-weight:600;color:' + (s.totalScore>=7.5?'var(--green)':s.totalScore>=5.5?'var(--amber)':'var(--text-3)') + '">' + s.totalScore.toFixed(1) + '</td>'
-      + '<td class="right wl-td"><span class="wl-verdict ' + verdictCls + '">' + s.verdict + '</span></td>'
-      + '<td class="right wl-td private">' + (s.currentPrice ? (sym2+s.currentPrice.toFixed(2)) : '<span class="wl-na">—</span>') + '</td>'
-      + '<td class="right wl-td">' + targetCell + '</td>'
-      + '<td class="right wl-td" style="color:' + upsideColor + ';font-weight:600">' + (upside !== null ? (upside > 0 ? '+' : '') + upside + '%' : '<span class="wl-na">—</span>') + '</td>'
-      + '<td class="right wl-td" style="white-space:nowrap">'
-      +   '<button class="wl-edit-target-btn" data-name="' + s.name.replace(/"/g,'&quot;') + '" onclick="toggleTargetForm(this.dataset.name)">&#9999; Update</button>'
-      +   '&nbsp;<button class="wl-remove-btn" onclick="removeFromWatchlist(\'' + nameEsc + '\')">✕</button>'
+      + '<td class="wl-td">'
+      +   '<div class="holding-name stock-link" onclick="showStockDetail(\'' + nameEsc + '\',\'watchlist\')">' + s.name + '</div>'
+      +   '<div class="holding-isin">' + (s.ticker || '\u2014') + '</div>'
+      +   '<div class="wl-mobile-sub"><span class="wl-verdict ' + verdictCls + '" style="font-size:9px">' + s.verdict + '</span> <span style="color:' + (s.totalScore>=7.5?'var(--green)':s.totalScore>=5.5?'var(--amber)':'var(--text-3)') + ';font-size:9px;font-weight:600">' + s.totalScore.toFixed(1) + '</span></div>'
       + '</td>'
-      + '</tr>'
+      + '<td class="right wl-td wl-hide-mobile" style="font-weight:600;color:' + (s.totalScore>=7.5?'var(--green)':s.totalScore>=5.5?'var(--amber)':'var(--text-3)') + '">' + s.totalScore.toFixed(1) + '</td>'
+      + '<td class="right wl-td wl-hide-mobile"><span class="wl-verdict ' + verdictCls + '">' + s.verdict + '</span></td>'
+      + '<td class="right wl-td private wl-hide-mobile">' + (s.currentPrice ? (sym2+s.currentPrice.toFixed(2)) : '<span class="wl-na">\u2014</span>') + '</td>'
+      + '<td class="right wl-td">' + targetCell + '</td>'
+      + '<td class="right wl-td" style="color:' + upsideColor + ';font-weight:600">' + (upside !== null ? (upside > 0 ? '+' : '') + upside + '%' : '<span class="wl-na">\u2014</span>') + '</td>'
+      + '<td class="right wl-td" style="white-space:nowrap">'
+      +   '<button class="wl-edit-target-btn" data-name="' + s.name.replace(/"/g,'&quot;') + '" onclick="toggleTargetForm(this.dataset.name)">&#9999;</button>'
+      +   '\u00a0<button class="wl-remove-btn" onclick="removeFromWatchlist(\'' + nameEsc + '\')">\u2715</button>'
+      + '</td>'
       + '</tr>';
   }).join('');
 }
