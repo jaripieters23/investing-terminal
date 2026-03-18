@@ -1678,7 +1678,14 @@ Object.defineProperty(window, 'ALLOC_TARGETS', { get: getAllocTargets });
 
 // Manual external investments: { Bonds: [{label, value},...], Other: [{label, value},...] }
 let _manualAlloc = (() => { try { return JSON.parse(localStorage.getItem('manualAlloc') || '{"Bonds":[],"Other":[]}'); } catch { return {"Bonds":[],"Other":[]}; } })();
-function saveManualAlloc() { try { localStorage.setItem('manualAlloc', JSON.stringify(_manualAlloc)); } catch {} }
+function saveManualAlloc() {
+  try { localStorage.setItem('manualAlloc', JSON.stringify(_manualAlloc)); } catch {}
+  // Debounced push to Supabase
+  clearTimeout(saveManualAlloc._timer);
+  saveManualAlloc._timer = setTimeout(() => {
+    supabasePushFile('manualAlloc', btoa(JSON.stringify(_manualAlloc))).catch(() => {});
+  }, 2000);
+}
 
 // Track which holdings filter is active so manual add/remove can re-render correctly
 let _currentHoldingsFilter = 'all';
@@ -5218,6 +5225,20 @@ async function supabasePullFiles() {
       } catch(e) { console.warn('[Supabase] holdingTargets restore failed:', e.message); }
     }
 
+    // Restore manual external investments
+    const maRow = files['manualAlloc'];
+    if (maRow && maRow.data) {
+      try {
+        const parsed = JSON.parse(atob(maRow.data));
+        if (parsed && typeof parsed === 'object') {
+          Object.assign(_manualAlloc, parsed);
+          localStorage.setItem('manualAlloc', JSON.stringify(_manualAlloc));
+          loaded = true;
+          console.log('[Supabase] manualAlloc restored:', JSON.stringify(parsed));
+        }
+      } catch(e) { console.warn('[Supabase] manualAlloc restore failed:', e.message); }
+    }
+
     return loaded;
   } catch(e) {
     console.warn('[Supabase] file pull failed:', e.message);
@@ -5235,6 +5256,11 @@ async function supabasePushLocalFiles() {
   // Also push holding targets if any exist
   if (Object.keys(_holdingTargets).length) {
     await supabasePushFile('holdingTargets', btoa(JSON.stringify(_holdingTargets))).catch(() => {});
+  }
+  // Also push manual external investments if any exist
+  const hasManualAlloc = Object.values(_manualAlloc).some(arr => arr.length > 0);
+  if (hasManualAlloc) {
+    await supabasePushFile('manualAlloc', btoa(JSON.stringify(_manualAlloc))).catch(() => {});
   }
 }
 
