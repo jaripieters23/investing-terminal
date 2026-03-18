@@ -1182,7 +1182,9 @@ function saveAllocTargets() {
   });
   if (sum !== 100) { showSettingsToast('Total must equal 100% (currently ' + sum + '%)'); return; }
   _settings.allocTargets = saved;
-  saveSettings();
+  LS.set('settings', _settings);
+  // Sync to Supabase
+  supabasePushFile('settings', btoa(JSON.stringify(_settings))).catch(() => {});
   if (portfolioRows) {
     const total = portfolioRows.reduce((s,r) => s + r.valueEUR, 0);
     renderAllocTable(portfolioRows, total);
@@ -5239,6 +5241,19 @@ async function supabasePullFiles() {
       } catch(e) { console.warn('[Supabase] manualAlloc restore failed:', e.message); }
     }
 
+    // Restore settings (e.g. allocation targets)
+    const stRow = files['settings'];
+    if (stRow && stRow.data) {
+      try {
+        const parsed = JSON.parse(atob(stRow.data));
+        if (parsed && typeof parsed === 'object') {
+          Object.assign(_settings, parsed);
+          LS.set('settings', _settings);
+          console.log('[Supabase] settings restored');
+        }
+      } catch(e) { console.warn('[Supabase] settings restore failed:', e.message); }
+    }
+
     return loaded;
   } catch(e) {
     console.warn('[Supabase] file pull failed:', e.message);
@@ -5262,6 +5277,8 @@ async function supabasePushLocalFiles() {
   if (hasManualAlloc) {
     await supabasePushFile('manualAlloc', btoa(JSON.stringify(_manualAlloc))).catch(() => {});
   }
+  // Push settings (includes allocation targets)
+  await supabasePushFile('settings', btoa(JSON.stringify(_settings))).catch(() => {});
 }
 
 
