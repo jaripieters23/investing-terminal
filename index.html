@@ -359,10 +359,18 @@ td{padding:8px 16px;vertical-align:middle}
 .modal-body{overflow-y:auto;padding:14px 20px;flex:1}
 .modal-footer{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
 .settings-body{max-width:680px;margin:0 auto;padding:28px 24px 80px}
-.settings-section{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;overflow:hidden}
-.settings-section-header{padding:16px 20px 14px;border-bottom:1px solid var(--border)}
-.settings-section-title{font-size:13px;font-weight:700;margin-bottom:2px}
-.settings-section-sub{font-size:11px;color:var(--text-3);line-height:1.5}
+.settings-section{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden}
+.settings-section-header{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;gap:12px}
+.settings-section-header:hover{background:rgba(255,255,255,.02)}
+.settings-section-left{display:flex;align-items:center;gap:10px}
+.settings-section-icon{font-size:16px;flex-shrink:0}
+.settings-section-title{font-size:13px;font-weight:700}
+.settings-section-sub{font-size:11px;color:var(--text-3);margin-top:2px;line-height:1.4}
+.settings-section-chevron{color:var(--text-3);font-size:11px;transition:transform .2s;flex-shrink:0}
+.settings-section-body{border-top:1px solid var(--border)}
+.settings-section-body.collapsed{display:none}
+.settings-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.04)}
+.settings-row:last-child{border-bottom:none}
 .settings-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.04)}
 .settings-row:last-child{border-bottom:none}
 .settings-row-label{flex:1;min-width:0}
@@ -620,149 +628,170 @@ html{scroll-padding-top:var(--topbar-h)}
 
 <div id="settings-page">
   <div class="settings-body">
-    <h2 style="font-size:18px;font-weight:700;margin:0 0 20px">Settings</h2>
+    <h2 style="font-size:18px;font-weight:700;margin:0 0 16px">Settings</h2>
+
+    <!-- ── 1. Portfolio ──────────────────────────────────────────── -->
     <div class="settings-section">
-      <div class="settings-section-header"><div class="settings-section-title">Portfolio Files</div><div class="settings-section-sub">Re-upload your DeGiro exports at any time.</div></div>
-      <div class="settings-row">
-        <div class="settings-row-label"><strong>Current holdings</strong><span>Portfolio export (.xlsx) — required</span></div>
-        <div class="settings-row-control">
-          <label class="settings-save-btn" style="cursor:pointer;position:relative;overflow:hidden">
-            <span id="settings-port-label">&#8593; Upload</span>
-            <input type="file" id="settings-portfolio-input" accept=".xls,.xlsx,.csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
-          </label>
+      <div class="settings-section-header" onclick="toggleSettingsSection(this)">
+        <div class="settings-section-left">
+          <span class="settings-section-icon">📁</span>
+          <div><div class="settings-section-title">Portfolio Files</div><div class="settings-section-sub">Re-upload your DeGiro exports at any time</div></div>
         </div>
+        <span class="settings-section-chevron">▲</span>
       </div>
-      <div class="settings-row">
-        <div class="settings-row-label"><strong>Transaction history</strong><span>Trades export for P&amp;L calculation (.xlsx)</span></div>
-        <div class="settings-row-control">
-          <label class="settings-save-btn" style="cursor:pointer;position:relative;overflow:hidden">
-            <span id="settings-tx-label">&#8593; Upload</span>
-            <input type="file" id="settings-tx-input" accept=".xls,.xlsx,.csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
-          </label>
+      <div class="settings-section-body">
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Current holdings</strong><span>Portfolio export (.xlsx) — required</span></div>
+          <div class="settings-row-control"><label class="settings-save-btn" style="cursor:pointer;position:relative;overflow:hidden"><span id="settings-port-label">&#8593; Upload</span><input type="file" id="settings-portfolio-input" accept=".xls,.xlsx,.csv" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label></div>
         </div>
-      </div>
-      <div class="settings-row">
-        <div class="settings-row-label"><strong>Account statement</strong><span>Rekeningoverzicht for deposits &amp; withdrawals (.xlsx)</span></div>
-        <div class="settings-row-control">
-          <label class="settings-save-btn" style="cursor:pointer;position:relative;overflow:hidden">
-            <span id="settings-acct-label">&#8593; Upload</span>
-            <input type="file" id="settings-acct-input" accept=".xls,.xlsx,.csv" style="position:absolute;inset:0;opacity:0;cursor:pointer">
-          </label>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Transaction history</strong><span>Trades export for P&amp;L (.xlsx)</span></div>
+          <div class="settings-row-control"><label class="settings-save-btn" style="cursor:pointer;position:relative;overflow:hidden"><span id="settings-tx-label">&#8593; Upload</span><input type="file" id="settings-tx-input" accept=".xls,.xlsx,.csv" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label></div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Account statement</strong><span>Rekeningoverzicht for deposits &amp; withdrawals (.xlsx)</span></div>
+          <div class="settings-row-control"><label class="settings-save-btn" style="cursor:pointer;position:relative;overflow:hidden"><span id="settings-acct-label">&#8593; Upload</span><input type="file" id="settings-acct-input" accept=".xls,.xlsx,.csv" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label></div>
         </div>
       </div>
     </div>
 
+    <!-- ── 2. Display & preferences ─────────────────────────────── -->
     <div class="settings-section">
-      <div class="settings-section-header"><div class="settings-section-title">API Connections</div><div class="settings-section-sub">All API calls are routed through your Cloudflare Workers. No keys are stored in the app.</div></div>
-      <div class="settings-row">
-        <div class="settings-row-label"><strong>Groq — AI scoring &amp; analysis</strong><span>via <code style="font-size:10px;color:var(--blue)">groq-proxy.jaripieters.workers.dev</code></span></div>
-        <div class="settings-row-control">
-          <button class="settings-save-btn secondary" id="groq-test-btn" onclick="testGroqConnection()">Test</button>
-          <span id="groq-test-result" class="test-result" style="color:var(--text-3)"></span>
+      <div class="settings-section-header" onclick="toggleSettingsSection(this)">
+        <div class="settings-section-left">
+          <span class="settings-section-icon">🎨</span>
+          <div><div class="settings-section-title">Display &amp; Preferences</div></div>
         </div>
+        <span class="settings-section-chevron">▲</span>
       </div>
-      <div class="settings-row">
-        <div class="settings-row-label"><strong>FMP — key metrics &amp; estimates</strong><span>via <code style="font-size:10px;color:var(--blue)">fmp-proxy.jaripieters.workers.dev</code></span></div>
-        <div class="settings-row-control">
-          <button class="settings-save-btn secondary" id="fmp-test-btn" onclick="testFmpConnection()">Test</button>
-          <span id="fmp-test-result" class="test-result" style="color:var(--text-3)"></span>
-        </div>
-      </div>
-      <div class="settings-row">
-        <div class="settings-row-label"><strong>Finnhub — quotes, profiles &amp; financials</strong><span>via <code style="font-size:10px;color:var(--blue)">finhubb-proxy.jaripieters.workers.dev</code></span></div>
-        <div class="settings-row-control">
-          <button class="settings-save-btn secondary" id="finnhub-test-btn" onclick="testFinnhubConnection()">Test</button>
-          <span id="finnhub-test-result" class="test-result" style="color:var(--text-3)"></span>
-        </div>
-      </div>
-      <div class="settings-row">
-        <div class="settings-row-label"><strong>Yahoo Finance — supplementary financials</strong><span>via <code style="font-size:10px;color:var(--blue)">yahoo-proxy.jaripieters.workers.dev</code> · fills gaps from free-tier APIs</span></div>
-        <div class="settings-row-control">
-          <button class="settings-save-btn secondary" id="yahoo-test-btn" onclick="testYahooConnection()">Test</button>
-          <span id="yahoo-test-result" class="test-result" style="color:var(--text-3)"></span>
-        </div>
+      <div class="settings-section-body">
+        <div class="settings-row"><div class="settings-row-label"><strong>Home currency</strong><span>Used for portfolio totals.</span></div><div class="settings-row-control"><select class="settings-select" id="setting-currency"><option value="EUR">EUR &euro;</option><option value="USD">USD $</option><option value="GBP">GBP &pound;</option><option value="CHF">CHF</option><option value="SEK">SEK</option><option value="NOK">NOK</option><option value="DKK">DKK</option></select></div></div>
+        <div class="settings-row"><div class="settings-row-label"><strong>Privacy mode</strong><span>Blur all personal amounts. Hover to reveal.</span></div><div class="settings-row-control"><label class="settings-toggle"><input type="checkbox" id="setting-privacy-mode"><div class="settings-toggle-track"></div><div class="settings-toggle-thumb"></div></label></div></div>
       </div>
     </div>
-    <div class="settings-section">
-      <div class="settings-section-header"><div class="settings-section-title">Stock Scan</div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>Auto-add BUY results to Investable Universe</strong><span>BUY-scored stocks are automatically added after scanning.</span></div><div class="settings-row-control"><label class="settings-toggle"><input type="checkbox" id="setting-auto-watchlist"><div class="settings-toggle-track"></div><div class="settings-toggle-thumb"></div></label></div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>Scan concurrency</strong><span>How many stocks to score in parallel.</span></div><div class="settings-row-control"><select class="settings-select" id="setting-concurrency"><option value="1">1 at a time</option><option value="2">2 at a time</option><option value="3" selected>3 at a time</option><option value="5">5 at a time</option></select></div></div>
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-header"><div class="settings-section-title">Display</div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>Home currency</strong><span>Used for portfolio totals.</span></div><div class="settings-row-control"><select class="settings-select" id="setting-currency"><option value="EUR">EUR &euro;</option><option value="USD">USD $</option><option value="GBP">GBP &pound;</option><option value="CHF">CHF</option><option value="SEK">SEK</option><option value="NOK">NOK</option><option value="DKK">DKK</option></select></div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>Privacy mode</strong><span>Blur all personal amounts &mdash; values, quantities, prices and the performance chart. Hover any blurred number to reveal it temporarily.</span></div><div class="settings-row-control"><label class="settings-toggle"><input type="checkbox" id="setting-privacy-mode"><div class="settings-toggle-track"></div><div class="settings-toggle-thumb"></div></label></div></div>
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-header">
-        <div class="settings-section-title">Allocation Targets</div>
-        <div class="settings-section-sub">Set your target allocation per asset class. Cash is excluded — percentages are of investable assets only. Total must add up to 100%.</div>
-      </div>
-      <div id="alloc-target-settings"></div>
-      <div class="settings-row">
-        <div class="settings-row-label">
-          <strong>Total</strong>
-          <span id="alloc-target-total-msg" style="color:var(--text-3)">Must equal 100%</span>
-        </div>
-        <div class="settings-row-control">
-          <span id="alloc-target-total" style="font-size:16px;font-weight:700;color:var(--text)">100%</span>
-          <button class="settings-save-btn" onclick="saveAllocTargets()">Save</button>
-        </div>
-      </div>
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-header"><div class="settings-section-title">Data &amp; Cache</div></div>
 
-      <div class="settings-row"><div class="settings-row-label"><strong>Clear FMP cache</strong><span><span id="fmp-cache-count">0</span> entries cached (TTL 1hr). Clears stock data, Groq scores, and price targets.</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearFmpCache()">Clear</button></div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>Clear stock detail cache</strong><span><span id="detail-cache-count">0</span> stocks cached.</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearDetailCache()">Clear</button></div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>API calls this session</strong><span style="font-family:monospace;font-size:12px">Finnhub: <span id="api-call-counter-finnhub" style="color:var(--blue)">0</span> &nbsp;·&nbsp; FMP: <span id="api-call-counter-fmp" style="color:var(--amber)">0</span> &nbsp;·&nbsp; Groq: <span id="api-call-counter-groq" style="color:var(--green)">0</span> &nbsp;<span style="color:var(--text-3)">(limits: Finnhub 60/min, FMP 250/day, Groq by tokens)</span></span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="_apiCalls.finnhub=0;_apiCalls.fmp=0;_apiCalls.groq=0;['finnhub','fmp','groq'].forEach(k=>{const el=document.getElementById('api-call-counter-'+k);if(el)el.textContent='0'});showSettingsToast('Counters reset')">Reset</button></div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>Clear Investable Universe</strong><span>Permanently removes all stocks from your Investable Universe.</span></div><div class="settings-row-control"><button class="settings-save-btn danger" onclick="confirmClearWatchlist()">Clear watchlist</button></div></div>
-    </div>
+    <!-- ── 3. Allocation targets ─────────────────────────────────── -->
     <div class="settings-section">
-      <div class="settings-section-header">
-        <div class="settings-section-title">☁️ Cloud Sync — Watchlist</div>
-        <div class="settings-section-sub">Watchlist syncs automatically across all your devices via your Cloudflare Worker. No keys needed in the app.</div>
+      <div class="settings-section-header" onclick="toggleSettingsSection(this)">
+        <div class="settings-section-left">
+          <span class="settings-section-icon">🎯</span>
+          <div><div class="settings-section-title">Allocation Targets</div><div class="settings-section-sub">Target % per asset class, excl. cash. Must total 100%.</div></div>
+        </div>
+        <span class="settings-section-chevron">▲</span>
       </div>
-      <div class="settings-row">
-        <div class="settings-row-label">
-          <strong>Supabase Worker</strong>
-          <span>via <code style="font-size:10px;color:var(--blue)">supabase-proxy.jaripieters.workers.dev</code></span>
-        </div>
-        <div class="settings-row-control">
-          <button class="settings-save-btn secondary" id="supabase-test-btn" onclick="testSupabaseConnection()">Test</button>
-          <span class="test-result" id="supabase-test-result"></span>
-        </div>
-      </div>
-      <div class="settings-row">
-        <div class="settings-row-label">
-          <strong>Sync status</strong>
-          <span id="supabase-sync-status">Checking…</span>
-        </div>
-        <div class="settings-row-control">
-          <button class="settings-save-btn secondary" onclick="supabasePush()">Push watchlist</button>
-          <button class="settings-save-btn secondary" onclick="supabasePull()">Pull watchlist</button>
-        </div>
-      </div>
-      <div class="settings-row">
-        <div class="settings-row-label">
-          <strong>Portfolio files</strong>
-          <span>Sync your Excel files across devices. Files are stored as encrypted base64 in Supabase.</span>
-        </div>
-        <div class="settings-row-control">
-          <button class="settings-save-btn secondary" onclick="supabasePushLocalFiles().then(()=>_updateSyncStatus('✓ Files pushed'))">Push files</button>
-          <button class="settings-save-btn secondary" onclick="(async()=>{showLoader('Pulling files…','Restoring from cloud');const loaded=await supabasePullFiles().catch(()=>false);hideLoader();if(loaded){persistPortfolio();renderDashboard();_updateSyncStatus('✓ Files pulled');}else{_updateSyncStatus('No new files in cloud');}})()">Pull files</button>
+      <div class="settings-section-body">
+        <div id="alloc-target-settings"></div>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Total</strong><span id="alloc-target-total-msg" style="color:var(--text-3)">Must equal 100%</span></div>
+          <div class="settings-row-control">
+            <span id="alloc-target-total" style="font-size:16px;font-weight:700;color:var(--text)">100%</span>
+            <button class="settings-save-btn" onclick="saveAllocTargets()">Save</button>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- ── 4. Stock Scan ─────────────────────────────────────────── -->
     <div class="settings-section">
-      <div class="settings-section-header"><div class="settings-section-title">About</div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>Scoring and analysis via <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b for scoring, llama-3.1-8b for detail pages). Financial data split by free tier: <strong style="color:var(--blue)">Finnhub</strong> (quotes, profiles, financials, metrics, news, insider, recommendations, earnings — 60 req/min, no daily cap) + <strong style="color:var(--amber)">FMP</strong> only for data unavailable free on Finnhub: ROIC/EV·EBITDA key-metrics, price targets, forward estimates (250 req/day, cached 24hr). All via Cloudflare Workers — no API keys in the app.</span></div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>Quality scoring</strong><span>Based on Pieter Slegers' <em>Compounding Quality</em>. 13 quantitative criteria (rule-based, 60%) + 7 qualitative factors scored by AI (40%). Final score /100.</span></div></div>
-      <div class="settings-row"><div class="settings-row-label"><strong>Privacy</strong><span>All portfolio data stays in your browser. API keys are stored securely in your Cloudflare Workers and never touch the app.</span></div></div>
+      <div class="settings-section-header" onclick="toggleSettingsSection(this)">
+        <div class="settings-section-left">
+          <span class="settings-section-icon">🔍</span>
+          <div><div class="settings-section-title">Stock Scan</div></div>
+        </div>
+        <span class="settings-section-chevron">▲</span>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-row"><div class="settings-row-label"><strong>Auto-add BUY results to Investable Universe</strong><span>BUY-scored stocks are automatically added after scanning.</span></div><div class="settings-row-control"><label class="settings-toggle"><input type="checkbox" id="setting-auto-watchlist"><div class="settings-toggle-track"></div><div class="settings-toggle-thumb"></div></label></div></div>
+        <div class="settings-row"><div class="settings-row-label"><strong>Scan concurrency</strong><span>How many stocks to score in parallel.</span></div><div class="settings-row-control"><select class="settings-select" id="setting-concurrency"><option value="1">1 at a time</option><option value="2">2 at a time</option><option value="3" selected>3 at a time</option><option value="5">5 at a time</option></select></div></div>
+      </div>
     </div>
+
+    <!-- ── 5. Cloud Sync ─────────────────────────────────────────── -->
+    <div class="settings-section">
+      <div class="settings-section-header" onclick="toggleSettingsSection(this)">
+        <div class="settings-section-left">
+          <span class="settings-section-icon">☁️</span>
+          <div><div class="settings-section-title">Cloud Sync</div><div class="settings-section-sub">Syncs watchlist, files, targets &amp; settings across devices via Supabase</div></div>
+        </div>
+        <span class="settings-section-chevron">▲</span>
+      </div>
+      <div class="settings-section-body">
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Connection</strong><span>via <code style="font-size:10px;color:var(--blue)">supabase-proxy.jaripieters.workers.dev</code></span></div>
+          <div class="settings-row-control">
+            <button class="settings-save-btn secondary" id="supabase-test-btn" onclick="testSupabaseConnection()">Test</button>
+            <span class="test-result" id="supabase-test-result"></span>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Sync status</strong><span id="supabase-sync-status">Checking…</span></div>
+          <div class="settings-row-control">
+            <button class="settings-save-btn secondary" onclick="supabasePush()">Push watchlist</button>
+            <button class="settings-save-btn secondary" onclick="supabasePull()">Pull watchlist</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label"><strong>Portfolio files &amp; settings</strong><span>Sync Excel files, allocation targets, holding targets and external investments.</span></div>
+          <div class="settings-row-control">
+            <button class="settings-save-btn secondary" onclick="supabasePushLocalFiles().then(()=>_updateSyncStatus('✓ All data pushed'))">Push all</button>
+            <button class="settings-save-btn secondary" onclick="(async()=>{showLoader('Pulling…','Restoring from cloud');const loaded=await supabasePullFiles().catch(()=>false);hideLoader();if(loaded){persistPortfolio();renderDashboard();_updateSyncStatus('✓ Data pulled');}else{_updateSyncStatus('No new data in cloud');}})()">Pull all</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 6. API Connections ─────────────────────────────────────── -->
+    <div class="settings-section">
+      <div class="settings-section-header" onclick="toggleSettingsSection(this)">
+        <div class="settings-section-left">
+          <span class="settings-section-icon">🔌</span>
+          <div><div class="settings-section-title">API Connections</div><div class="settings-section-sub">All calls via your Cloudflare Workers — no keys stored in the app</div></div>
+        </div>
+        <span class="settings-section-chevron">▲</span>
+      </div>
+      <div class="settings-section-body collapsed">
+        <div class="settings-row"><div class="settings-row-label"><strong>Groq — AI scoring</strong><span>via <code style="font-size:10px;color:var(--blue)">groq-proxy.jaripieters.workers.dev</code></span></div><div class="settings-row-control"><button class="settings-save-btn secondary" id="groq-test-btn" onclick="testGroqConnection()">Test</button><span id="groq-test-result" class="test-result" style="color:var(--text-3)"></span></div></div>
+        <div class="settings-row"><div class="settings-row-label"><strong>FMP — key metrics &amp; estimates</strong><span>via <code style="font-size:10px;color:var(--blue)">fmp-proxy.jaripieters.workers.dev</code></span></div><div class="settings-row-control"><button class="settings-save-btn secondary" id="fmp-test-btn" onclick="testFmpConnection()">Test</button><span id="fmp-test-result" class="test-result" style="color:var(--text-3)"></span></div></div>
+        <div class="settings-row"><div class="settings-row-label"><strong>Finnhub — quotes &amp; financials</strong><span>via <code style="font-size:10px;color:var(--blue)">finhubb-proxy.jaripieters.workers.dev</code></span></div><div class="settings-row-control"><button class="settings-save-btn secondary" id="finnhub-test-btn" onclick="testFinnhubConnection()">Test</button><span id="finnhub-test-result" class="test-result" style="color:var(--text-3)"></span></div></div>
+        <div class="settings-row"><div class="settings-row-label"><strong>Yahoo Finance — supplementary</strong><span>via <code style="font-size:10px;color:var(--blue)">yahoo-proxy.jaripieters.workers.dev</code></span></div><div class="settings-row-control"><button class="settings-save-btn secondary" id="yahoo-test-btn" onclick="testYahooConnection()">Test</button><span id="yahoo-test-result" class="test-result" style="color:var(--text-3)"></span></div></div>
+      </div>
+    </div>
+
+    <!-- ── 7. Data & Cache ────────────────────────────────────────── -->
+    <div class="settings-section">
+      <div class="settings-section-header" onclick="toggleSettingsSection(this)">
+        <div class="settings-section-left">
+          <span class="settings-section-icon">🗄️</span>
+          <div><div class="settings-section-title">Data &amp; Cache</div></div>
+        </div>
+        <span class="settings-section-chevron">▲</span>
+      </div>
+      <div class="settings-section-body collapsed">
+        <div class="settings-row"><div class="settings-row-label"><strong>Clear FMP cache</strong><span><span id="fmp-cache-count">0</span> entries cached (TTL 1hr).</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearFmpCache()">Clear</button></div></div>
+        <div class="settings-row"><div class="settings-row-label"><strong>Clear stock detail cache</strong><span><span id="detail-cache-count">0</span> stocks cached.</span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="clearDetailCache()">Clear</button></div></div>
+        <div class="settings-row"><div class="settings-row-label"><strong>API calls this session</strong><span style="font-family:monospace;font-size:12px">Finnhub: <span id="api-call-counter-finnhub" style="color:var(--blue)">0</span> &nbsp;·&nbsp; FMP: <span id="api-call-counter-fmp" style="color:var(--amber)">0</span> &nbsp;·&nbsp; Groq: <span id="api-call-counter-groq" style="color:var(--green)">0</span></span></div><div class="settings-row-control"><button class="settings-save-btn secondary" onclick="_apiCalls.finnhub=0;_apiCalls.fmp=0;_apiCalls.groq=0;['finnhub','fmp','groq'].forEach(k=>{const el=document.getElementById('api-call-counter-'+k);if(el)el.textContent='0'});showSettingsToast('Counters reset')">Reset</button></div></div>
+        <div class="settings-row"><div class="settings-row-label"><strong>Clear Investable Universe</strong><span>Permanently removes all stocks.</span></div><div class="settings-row-control"><button class="settings-save-btn danger" onclick="confirmClearWatchlist()">Clear</button></div></div>
+      </div>
+    </div>
+
+    <!-- ── 8. About ───────────────────────────────────────────────── -->
+    <div class="settings-section">
+      <div class="settings-section-header" onclick="toggleSettingsSection(this)">
+        <div class="settings-section-left">
+          <span class="settings-section-icon">ℹ️</span>
+          <div><div class="settings-section-title">About</div></div>
+        </div>
+        <span class="settings-section-chevron">▲</span>
+      </div>
+      <div class="settings-section-body collapsed">
+        <div class="settings-row"><div class="settings-row-label"><strong>AI provider</strong><span>Scoring via <strong style="color:var(--text-2)">Groq</strong> (llama-3.3-70b). Financial data: <strong style="color:var(--blue)">Finnhub</strong> (quotes, profiles, financials — 60 req/min) + <strong style="color:var(--amber)">FMP</strong> (ROIC, price targets, forward estimates — 250 req/day, cached 24hr).</span></div></div>
+        <div class="settings-row"><div class="settings-row-label"><strong>Quality scoring</strong><span>Based on Pieter Slegers' <em>Compounding Quality</em>. 7 qualitative AI factors scored /100.</span></div></div>
+        <div class="settings-row"><div class="settings-row-label"><strong>Privacy</strong><span>All portfolio data stays in your browser. API keys live in your Cloudflare Workers only.</span></div></div>
+      </div>
+    </div>
+
   </div>
 </div>
-
 <div id="pnl-page"></div>
 <div id="stock-page"></div>
 <div id="news-page" style="display:none"></div>
@@ -1139,6 +1168,13 @@ function confirmClearWatchlist() {
   saveWatchlist();
   renderWatchlistTable();
   showSettingsToast('Watchlist cleared');
+}
+
+function toggleSettingsSection(header) {
+  const body = header.nextElementSibling;
+  const chev = header.querySelector('.settings-section-chevron');
+  const collapsed = body.classList.toggle('collapsed');
+  if (chev) chev.style.transform = collapsed ? 'rotate(180deg)' : '';
 }
 
 function renderAllocTargetSettings() {
