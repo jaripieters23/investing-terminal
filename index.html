@@ -1701,16 +1701,24 @@ function addManualAllocEntry(key) {
   if (!_manualAlloc[key]) _manualAlloc[key] = [];
   _manualAlloc[key].push({ label, value });
   saveManualAlloc();
-  const total = portfolioRows.reduce((s,r) => s + r.valueEUR, 0);
-  renderAllocTable(portfolioRows, total);
-  renderGroupedHoldings(portfolioRows, total, _currentHoldingsFilter);
+  _rerenderAfterManualAlloc();
 }
 
 function removeManualAllocEntry(key, idx) {
   if (_manualAlloc[key]) { _manualAlloc[key].splice(idx, 1); saveManualAlloc(); }
+  _rerenderAfterManualAlloc();
+}
+
+function _rerenderAfterManualAlloc() {
+  if (!portfolioRows) return;
   const total = portfolioRows.reduce((s,r) => s + r.valueEUR, 0);
   renderAllocTable(portfolioRows, total);
-  renderGroupedHoldings(portfolioRows, total, _currentHoldingsFilter);
+  // Re-render current holdings page if open, else dashboard grouped
+  if (window._currentHoldingsKey) {
+    renderHoldingsPage(window._currentHoldingsKey);
+  } else {
+    renderGroupedHoldings(portfolioRows, total, _currentHoldingsFilter);
+  }
 }
 
 function renderAllocTable(rows, total) {
